@@ -5,7 +5,13 @@
 // with a scripted sequence of page states, so the timing rule is proved without a browser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { signedInNow, watchForSignIn } from '../src/browser/session-watch.js';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -83,6 +89,24 @@ test('a window that goes away is an ending, not a sign-in', async () => {
   assert.equal(browser.calls.hidden, 0, 'nothing to hide');
 });
 
+test('closing after the login page has gone still records the session', async () => {
+  // The operator can close faster than the second confirming poll. The last loaded page
+  // was already signed in, so the close is the confirmation, not a failure (24 Nov).
+  const browser = fakeBrowser([LOGIN, SIGNED, 'gone']);
+  let signedUrl = '';
+  let why = null;
+  watchForSignIn(browser, {
+    intervalMs: 5,
+    timeoutMs: 500,
+    autoHide: false,
+    onSignedIn: (url) => { signedUrl = url; },
+    onGone: (reason) => { why = reason; },
+  });
+  await wait(100);
+  assert.equal(signedUrl, 'https://example.test/home');
+  assert.equal(why, null, 'a quick close was reported as a failure');
+});
+
 test('a hand-off leaves the window for the operator and still notices the close', async () => {
   // A bot check has no password box: an auto-hide would take the window away mid-challenge.
   // The operator closes it, and that close is the ending the model waits for.
@@ -108,4 +132,18 @@ test('a wait that runs out ends quietly', async () => {
   watchForSignIn(browser, { intervalMs: 5, timeoutMs: 40, onGone: (reason) => { why = reason; } });
   await wait(120);
   assert.equal(why, 'timeout');
+});
+
+test('Settings reports the confirmed session, not a late waiting toast', () => {
+  const page = read('web/settings-window.js');
+  assert.doesNotMatch(page, /SynaBrowse Is Waiting/, 'the stale toast is gone');
+  assert.match(page, /closes itself when the session is confirmed/);
+  assert.match(page, /Signed in to .*the session is kept/);
+  assert.match(page, /Nothing was recorded/, 'a close without a session is reported');
+});
+
+test('the Settings sign-in closes itself and polls promptly', () => {
+  const api = read('src/api.js');
+  assert.match(api, /watchIntervalMs: 1000/, 'two polls should not take four seconds');
+  assert.match(api, /settle\('signed-in'\)/, 'the request ends when the session is confirmed');
 });

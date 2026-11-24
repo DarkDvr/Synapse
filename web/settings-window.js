@@ -350,20 +350,8 @@ export function onSettingsInput(e) {
   }
 }
 
-// The sign-in row's own state: which host a sign-in is waiting on, and whether the
-// operator has closed the window (so the address is being checked). The button is the
-// one control in Settings that stays busy across two answers — the window opening, and
-// the session being confirmed — so it says which one it is in (11 Nov).
-let browserSigninHost = null;
-
-/** The window is up: the click has been answered, and the button is free again. */
-export function browserSigninOpened(host) {
-  browserSigninHost = String(host || '');
-}
-
 /** The check is over, either way: the button is Sign In… again. */
 export function browserSigninSettled() {
-  browserSigninHost = null;
   const button = $('settingsBody')?.querySelector('#browserSignin');
   if (!button) return;
   button.classList.remove('is-working');
@@ -395,14 +383,14 @@ export async function onSettingsClick(e) {
     // say what is happening meanwhile, or the click reads as ignored (11 Nov).
     say('Starting the browser…');
     const stage2 = setTimeout(() => say('Loading the page…'), 1500);
-    const stage3 = setTimeout(() => say('Waiting for the window — it appears on the second monitor.'), 6000);
+    const stage3 = setTimeout(() => say('Waiting for the window — sign in; it closes itself when the session is confirmed.'), 6000);
     try {
       const answer = await api('POST', '/api/browser/signin', { url });
-      if (answer?.ok) {
-        say(`Waiting for you at ${answer.host || url} — sign in, then close the window. The row appears once the session is confirmed.`);
-        toast('SynaBrowse Is Waiting', 'It is on the second monitor — sign in, then close the window.');
-        browserSigninOpened(answer.host || url);
+      if (answer?.ok && answer.signedIn) {
+        say(`Signed in to ${answer.host || url} — the session is kept.`);
         if (field) field.value = '';
+      } else if (answer?.ok) {
+        say('The window closed before a session was confirmed. Nothing was recorded — try again.');
       } else {
         say(answer?.error || 'The browser did not start.');
         toast('Could Not Open SynaBrowse', answer?.error || 'The browser did not start.');

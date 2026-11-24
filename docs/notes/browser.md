@@ -185,8 +185,13 @@ the same page, and the site is recorded in the Signed In table. The card says to
 window. A close without a session is a Reject, and the model carries on without the site.
 
 The Settings → Browser **Sign In…** path has no model waiting: it shows the same window and
-watches it, and when the page stops asking to be signed into — no password box, no sign-in
-route, loaded, twice in a row — the window is hidden and the site recorded.
+watches it. When the page stops asking to be signed into — no password box, no sign-in
+route, loaded, twice in a row — the site is recorded and the dedicated window closes
+itself; the Settings note then says the session is kept. Closing it after the login page
+has gone also counts as confirmation, even if the second poll never landed. Closing before
+that is reported as “nothing was recorded”.
+
+The window is checked once a second, so the confirmation is not a four-second wait.
 
 ### The window has to be findable (22 Nov)
 
@@ -348,17 +353,20 @@ is a different process (`msedgewebview2.exe`), so Synapse's own window cannot be
 - **The table's last row is the form**: type an address, press `Sign In…` or Enter. It is
   not validated — a browser resolves `example.test` or a LAN address; the harness only
   chooses the scheme to try first (https, then http).
-- The row is written **only after the operator closes the window and the address is
-  opened once more, hidden**. `looksUnconfirmed()` refuses it while the page still has a
-  password box or sits on a sign-in route; nothing is added and the toast says why.
+- The row is written when the page is confirmed signed in, or when the operator closes it
+  after the login page has gone. `looksUnconfirmed()` refuses it while the page still has a
+  password box or sits on a sign-in route; a close before confirmation records nothing and
+  the Settings note says so.
 - A confirmed row keeps the address it was confirmed at and shows ages, not countdowns:
-  when a session expires is the site's decision.
+  when a session expires is the site's decision. A site that asks on every request — many
+  routers — has no session to keep; its row is still a record of the sign-in, but the next
+  open asks again.
 - ✕ forgets a site: the row goes and the browser drops that site's cookies **and its
   storage**. The parent domain matters — clearing `www.reddit.com` left seven cookies on
   `.reddit.com`, so the operator stayed signed in after deleting the row. Cookies are
   listed by name and domain to delete them; a value is never stored, logged or returned.
 
-The sign-in button says what it is doing: **Opening…** then **Saving…**, both breathing.
+The sign-in button says what it is doing: **Opening…** then **Sign In…**, both breathing.
 
 ## Project artifacts, not a shared folder
 

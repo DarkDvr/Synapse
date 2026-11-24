@@ -66,6 +66,7 @@ export async function askToSignIn({
   focus = false,
   sound = null,
   autoHide = true,
+  watchIntervalMs = 2000,
   onSignedIn = null,
   onGone = null,
 } = {}) {
@@ -135,6 +136,7 @@ export async function askToSignIn({
   watchForSignIn(browser, {
     log,
     autoHide,
+    intervalMs: watchIntervalMs,
     onSignedIn: (finalUrl) => { try { onSignedIn?.(finalUrl); } catch { /* a listener must not break the page */ } },
     onGone: (why) => { try { onGone?.(why); } catch { /* a listener must not break the page */ } },
   });

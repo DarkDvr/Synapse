@@ -40,13 +40,23 @@ export function watchForSignIn(browser, { intervalMs = 2000, timeoutMs = 10 * 60
   let stopped = false;
   let streak = 0;
   let reported = false;
+  let lastState = null;
   const began = Date.now();
 
-  const finish = (why) => {
+  const finish = (why, state = lastState) => {
     if (stopped) return;
     stopped = true;
     clearInterval(timer);
     clearTimeout(deadline);
+    // Closing the window after the login page has gone is still a sign-in, even if the
+    // second confirming poll never landed. Without this, a quick close recorded nothing
+    // and the operator was told their session had failed when it had not (24 Nov).
+    if (why === 'closed' && !reported && state && signedInNow(state)) {
+      reported = true;
+      log?.info?.(`browser: signed in at ${state.url} — the window closed before the second poll`);
+      try { onSignedIn?.(state.url); } catch { /* a listener must not break the page */ }
+      return;
+    }
     log?.info?.(`browser: watch ended (${why}) after ${Date.now() - began}ms`);
     onGone?.(why);
   };
@@ -61,6 +71,7 @@ export function watchForSignIn(browser, { intervalMs = 2000, timeoutMs = 10 * 60
       finish('closed');
       return;
     }
+    lastState = state;
     if (signedInNow(state)) {
       streak += 1;
       if (streak < 2) return;

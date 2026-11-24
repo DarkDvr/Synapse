@@ -941,9 +941,10 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     let opened = null;
     try {
       opened = await openSignInBrowser();
-      // The request stays open until the operator closes the window. The sign-in watcher
-      // records the site the moment the page stops asking; the close is the operator's
-      // "done", and only then may the host be stopped and the WebView2 profile released.
+      // The request waits for the session, not for the operator to close the window:
+      // the watcher records the site, this settles, and the finally below stops the
+      // dedicated sign-in host. Closing the window without a session settles through
+      // onGone and is reported back as not signed in.
       let settle = null;
       const done = new Promise((resolve) => { settle = resolve; });
       let signed = false;
@@ -954,18 +955,25 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         profile: opened.profile,
         browser: opened.browser,
         autoHide: false,
+        // A sign-in is a visible confirmation: one second between looks, so the window
+        // closes and the row appears within a couple of seconds rather than four.
+        watchIntervalMs: 1000,
         log: app,
         sound,
         // The watcher inside askToSignIn has *already recorded the site* by the time this
         // fires: the page stopped asking to be signed into, so the session is real.
         onSignedIn: async (signedUrl) => {
-          signed = true;
-          const host = String(signedUrl || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
-          const next = getConfig();
-          next.browser = { ...next.browser, sites: addSite(next.browser?.sites, host, Date.now(), signedUrl) };
-          applyConfig(next);
-          app.info(`SynaBrowse: ${host} signed in; the window was closed and the session kept`);
-          notify?.({ kind: 'browser-session-kept', host, url: signedUrl, ts: Date.now() });
+          try {
+            signed = true;
+            const host = String(signedUrl || '').replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0].toLowerCase();
+            const next = getConfig();
+            next.browser = { ...next.browser, sites: addSite(next.browser?.sites, host, Date.now(), signedUrl) };
+            applyConfig(next);
+            app.info(`SynaBrowse: ${host} signed in; the window was closed and the session kept`);
+            notify?.({ kind: 'browser-session-kept', host, url: signedUrl, ts: Date.now() });
+          } finally {
+            settle('signed-in');
+          }
         },
         onGone: (why) => settle(String(why || 'closed')),
       });
