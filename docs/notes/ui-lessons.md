@@ -240,6 +240,10 @@ clock and picker joined into one row.
   (`.msg-body > :is(.reasoning, .tool-card) + .msg-answer` and `.msg-answer +
   :is(.reasoning, .tool-card)`). CSS only: the adjacency is the fact, so nothing decides
   whether a paragraph is "the answer".
+- **A gap is not a surface.** The rule break is painted out with the panel's own ink,
+  `--chat-ink`, not `--surface`: the dock is translucent over the ground picture, and a
+  lighter surface showed as a grey bar in the green rule (reported 24 Nov). With
+  `data-ground="none"` the dock is the surface, so the variable switches with it.
 - **A steer is the operator talking, so it never folds.** It is drawn twice: the engine
   keeps the `[steer]` marker, and the transcript shows a violet **You** with a bright yellow
   **STEER:** inside the text span (so the browser aligns it with the first line, not 9.5px

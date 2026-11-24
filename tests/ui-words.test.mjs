@@ -354,7 +354,13 @@ contract('a file the engine loads is one collapsed line, not its whole text', ()
 contract('the final answer has its own rule, and work does not', () => {
   const css = read('web/synapse.css');
   assert.match(css, /\.msg\.assistant \.msg-answer\.is-answer\s*\{[^}]*margin-top: 20px/);
-  assert.match(css, /\.msg\.assistant \.msg-answer\.is-answer::before\s*\{[^}]*background: var\(--surface\)/);
+  assert.match(css, /\.msg\.assistant \.msg-answer\.is-answer::before\s*\{[^}]*background: var\(--chat-ink\)/);
+  assert.match(css, /\.chat-dock\s*\{[^}]*--chat-ink: #0a0d12/, 'the gap is the dock ink, not a lighter surface');
+  assert.match(
+    css,
+    /body\[data-ground="none"\] \.chat-dock \{ --chat-ink: var\(--surface\); \}/,
+    'a flat ground paints its own panel colour into the gap',
+  );
   const js = ui();
   assert.match(js, /is-answer/);
   assert.match(js, /workBefore/);
@@ -383,12 +389,12 @@ contract('prose and cards are separated wherever they meet, either way round', (
   );
   assert.match(
     region('.msg.assistant .msg-body > :is(.reasoning, .tool-card) + .msg-answer::before'),
-    /background: var\(--surface\)/,
+    /background: var\(--chat-ink\)/,
     'the rule must be painted out for the height of the gap',
   );
   assert.match(
     region('.msg.assistant .msg-body > .msg-answer + :is(.reasoning, .tool-card)::before'),
-    /background: var\(--surface\)/,
+    /background: var\(--chat-ink\)/,
     'both directions break the rule',
   );
 });

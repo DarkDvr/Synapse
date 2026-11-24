@@ -1085,6 +1085,10 @@ body.dark .sidebar-bottom,
 /* ── 11. chat dock (no header — it costs a whole row) ──────────────────── */
 
 .chat-dock {
+  /* The opaque ink behind the transcript. The dock is a translucent panel over
+     the ground picture, so --surface is not what the green rule sits on: painting
+     the answer gap with --surface left a grey bar in the rule (24 Nov). */
+  --chat-ink: #0a0d12;
   position: relative;
   display: grid; grid-template-rows: minmax(0, 1fr) auto;
   background: var(--surface); border: 1px solid var(--line);
@@ -1732,7 +1736,7 @@ body[data-mode="single"] #runAuto { display: none; }
 }
 .msg.assistant .msg-answer.is-answer::before {
   content: ""; position: absolute; left: -12px; top: -20px;
-  width: 2px; height: 20px; background: var(--surface);
+  width: 2px; height: 20px; background: var(--chat-ink);
 }
 /* Speech against work — in both directions, and not only at the end of a turn.
    A turn is one long alternation (reasoning, speech, tool, reasoning, speech…)
@@ -1749,7 +1753,7 @@ body[data-mode="single"] #runAuto { display: none; }
 .msg.assistant .msg-body > :is(.reasoning, .tool-card) + .msg-answer::before,
 .msg.assistant .msg-body > .msg-answer + :is(.reasoning, .tool-card)::before {
   content: ""; position: absolute; left: -12px; top: -20px;
-  width: 2px; height: 20px; background: var(--surface);
+  width: 2px; height: 20px; background: var(--chat-ink);
 }
 .msg-answer > :first-child { margin-top: 0; }
 .msg-answer > :last-child { margin-bottom: 0; }
@@ -3534,6 +3538,7 @@ body[data-ground="none"] .control-room .main-content { background: #0e161e; back
 body[data-ground="none"] .chat-dock,
 body[data-ground="none"] .role-card,
 body[data-ground="none"] .rail-panel { background: var(--surface); }
+body[data-ground="none"] .chat-dock { --chat-ink: var(--surface); }
 body[data-ground="none"] .composer { background: #1a1c20; }
 body[data-ground="none"] .sidebar { background-image: none; background-color: #191b1f; }
 
