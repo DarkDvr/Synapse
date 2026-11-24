@@ -128,11 +128,13 @@ test('the app window lets a notification play before the first click', () => {
 });
 
 test('a finished worker asks the server before the chime', () => {
-  // The runner wakes the Architect several seconds after the worker's finish. A look
-  // at the server then puts the Architect in busySessions and cancels the hold; one
-  // look immediately would still see an idle server.
+  // The runner wakes the Architect several seconds after the worker's finish. The
+  // page tracks that pending judgment directly; the server look clears the flag once
+  // the Architect is busy, rather than guessing with a long timer.
   const page = read('web/app.js');
-  assert.match(page, /ev\.type === 'run\.finished'[\s\S]{0,250}schedulePendingRefresh/);
+  assert.match(page, /ev\.type === 'run\.finished'[\s\S]{0,300}markAwaitingJudge\(ev\.dir\)/);
+  assert.match(page, /awaitingJudge\.has\(key\)/);
+  assert.match(page, /clearAwaitingJudge\(key\)/);
   assert.match(page, /setTimeout\(schedulePendingRefresh, 5000\)/);
 });
 

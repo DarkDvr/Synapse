@@ -349,8 +349,45 @@ const attention = createAttention({
   },
 });
 
+// A worker's report wakes the Architect to judge it. That gap has no live run and no
+// busy session yet, so it looked like a finish. This is the missing state: the report
+// is waiting for its judging turn. It is cleared the moment that turn is seen running,
+// and the cap only exists so a lost wake cannot silence the chime for ever.
+const awaitingJudge = new Set();
+const awaitingSince = new Map();
+const AWAITING_MAX_MS = 30000;
+
+function markAwaitingJudge(dir) {
+  const key = dirKey(dir);
+  if (!key) return;
+  awaitingJudge.add(key);
+  awaitingSince.set(key, Date.now());
+}
+
+function clearAwaitingJudge(dir) {
+  const key = dirKey(dir);
+  if (!key) return;
+  awaitingJudge.delete(key);
+  awaitingSince.delete(key);
+}
+
 /** Read every chat's state and let the watcher say what changed. */
 function noteAttention() {
+  const now = Date.now();
+  for (const [key, at] of awaitingSince) {
+    if (now - at > AWAITING_MAX_MS) {
+      awaitingJudge.delete(key);
+      awaitingSince.delete(key);
+    }
+  }
+  for (const key of [...awaitingJudge]) {
+    const project = state.projects.find((p) => dirKey(p.directory) === key);
+    const busy = Boolean(project) && (project.sessions || []).some((s) => state.busySessions.has(s.id));
+    if (busy) {
+      awaitingJudge.delete(key);
+      awaitingSince.delete(key);
+    }
+  }
   attention.note(
     chatStates({
       projects: state.projects,
@@ -358,6 +395,7 @@ function noteAttention() {
       busySessions: state.busySessions,
       permissions: state.permissions,
       forms: state.forms,
+      awaiting: awaitingJudge,
     }),
     { openDir: chatDir() },
   );
@@ -406,6 +444,14 @@ function noteWorking() {
   // while another was open is exactly what this now watches (20 Nov).
   noteAttention();
   const live = state.view === 'session' && Boolean(state.sessionId) && sessionWorking(state.sessionId);
+  const key = chatDir();
+  // The worker's report is waiting for the Architect's judging turn. That is not a
+  // finish, even though no run and no busy session exist yet; wait for the turn rather
+  // than guessing with a timer. Once it starts, the normal working path takes over.
+  if (key && awaitingJudge.has(key)) {
+    if (!live) return;
+    clearAwaitingJudge(key);
+  }
   // Which chat was working when this was last evaluated. Opening another project is not
   // the work finishing — that reading belonged to a different session, and the chime
   // played for a project finished hours earlier (12 Nov).
@@ -1681,17 +1727,21 @@ function connectStream() {
     if (ev.kind === 'run') {
       // A run that is stopping was ended by the operator: its finish must not chime,
       // in this chat or any other (see attention.js).
-      if (ev.type === 'run.stopping') attention.quietUntil(ev.dir);
+      if (ev.type === 'run.stopping') {
+        attention.quietUntil(ev.dir);
+        clearAwaitingJudge(ev.dir);
+      }
       handleRunEvent(ev);
-      // The runner wakes the Architect a few seconds after the worker's report. Ask
-      // the server now rather than waiting out the eight-second poll: the pending
-      // answer puts the Architect in `busySessions`, so the finished-work hold is
-      // cancelled instead of chiming over its judging turn (24 Nov).
       if (ev.type === 'run.finished') {
+        // A completed or failed worker report is handed to the Architect to judge.
+        // That is the next piece of work, not the end of the workflow.
+        if (ev.outcome === 'stopped' || ev.outcome === 'interrupted') clearAwaitingJudge(ev.dir);
+        else markAwaitingJudge(ev.dir);
+        // The runner wakes the Architect a few seconds after the report. Ask the
+        // server now and after the measured wake, so the Architect appears in
+        // `busySessions` and the awaiting flag is cleared without waiting for the
+        // eight-second poll.
         schedulePendingRefresh();
-        // The report wake has been measured five seconds after the worker's finish;
-        // one look now would still see an idle server. The second look lands after
-        // the wake, while the ten-second chime hold is still open.
         setTimeout(schedulePendingRefresh, 5000);
       }
       // A run ending can leave the chat idle without a session event (the Architect's

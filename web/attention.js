@@ -21,10 +21,11 @@
 import { dirKey } from './run-view.js';
 
 /** What every chat is doing, keyed by directory. */
-export function chatStates({ projects = [], runs = null, busySessions = null, permissions = [], forms = [] } = {}) {
+export function chatStates({ projects = [], runs = null, busySessions = null, permissions = [], forms = [], awaiting = null } = {}) {
   const out = new Map();
   const live = runs instanceof Map ? runs : new Map();
   const busy = busySessions instanceof Set ? busySessions : new Set(busySessions || []);
+  const judging = awaiting instanceof Set ? awaiting : new Set(awaiting || []);
   const blocked = new Set();
   for (const ask of [...(permissions || []), ...(forms || [])]) {
     const key = dirKey(ask?.directory || '');
@@ -34,12 +35,15 @@ export function chatStates({ projects = [], runs = null, busySessions = null, pe
     const key = dirKey(project?.directory);
     if (!key) continue;
     out.set(key, {
-      working: live.has(key) || (project.sessions || []).some((s) => busy.has(s.id)),
+      // A worker's report wakes the Architect to judge it. Until that turn starts,
+      // the chat is not idle: the workflow has more work even though no run is live.
+      working: live.has(key) || judging.has(key) || (project.sessions || []).some((s) => busy.has(s.id)),
       blocked: blocked.has(key),
     });
   }
   // A run whose project the rail has not loaded yet: the work is still real.
   for (const key of live.keys()) if (!out.has(key)) out.set(key, { working: true, blocked: blocked.has(key) });
+  for (const key of judging) if (!out.has(key)) out.set(key, { working: true, blocked: blocked.has(key) });
   return out;
 }
 
@@ -65,13 +69,13 @@ export function transitions(before, after, { skipFinished = new Set() } = {}) {
 /**
  * How long a finish is held back before it is worth a sound.
  *
- * A gap is not a finish: the Architect reads a worker's report and starts the next turn
- * a second or two later, and with Keep Building on it starts the next task. The runner's
- * report wake is not instant either — measured 5s between a worker finishing and the
- * "wake sent" line — so four seconds chimed over the Architect's judging turn (24 Nov).
- * Ten seconds clears that wake and still lets a real finish speak.
+ * A worker's report is not a finish: the runner wakes the Architect to judge it, and
+ * that wake can take a few seconds. The page now tracks that pending judgment directly
+ * (`awaiting`), so this grace only absorbs the ordinary gap between a real turn ending
+ * and the next event. It is short on purpose: once the Architect has judged, the
+ * workflow is over and the chime should be heard.
  */
-export const FINISH_GRACE_MS = 10000;
+export const FINISH_GRACE_MS = 1000;
 
 /**
  * Wait out the gap before saying a chat has finished — the same rule for the open chat.

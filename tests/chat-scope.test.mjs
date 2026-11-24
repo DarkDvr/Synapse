@@ -300,10 +300,15 @@ test('a stopped chat does not chime, and the open chat is left to noteWorking', 
   assert.deepEqual(events, [], 'a stopped chat, or the open chat, chimed');
 });
 
-test('the finish grace outlasts the report wake', () => {
-  // Measured 24 Nov: the worker's run finished at 11:38:26, the runner's "wake sent"
-  // for the Architect came at 11:38:31. The old four-second grace chimed in between.
-  assert.ok(FINISH_GRACE_MS >= 10000, `the grace is ${FINISH_GRACE_MS}ms; it must clear the 5s wake`);
+test('a report waiting for the Architect is work, and the grace is short', () => {
+  const key = dirKey(B);
+  const states = chatStates({
+    projects: [{ directory: B, sessions: [{ id: 'ses_arch' }] }],
+    awaiting: new Set([key]),
+  });
+  assert.equal(states.get(key)?.working, true, 'the report gap looked like a finish');
+  // The old ten-second timer is gone: the pending judgment is tracked directly.
+  assert.ok(FINISH_GRACE_MS <= 2000, `the grace is ${FINISH_GRACE_MS}ms; it must not delay a real finish`);
 });
 
 test('the waiting post says how many turns are ahead', async () => {
