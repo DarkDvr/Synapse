@@ -83,10 +83,25 @@ function restore(from) {
  * data\ keeps the Medium label the temp copy already has.
  */
 function moveIntoPlace(from, to) {
+  // A partial extraction or an antivirus scan can leave a zero-byte or truncated
+  // exe. Check it before touching the working one.
+  const bytes = fs.statSync(from).size;
+  if (bytes < 500_000) throw new Error(`the new Synapse.exe is incomplete (${bytes} bytes)`);
   const tmp = path.join(root, 'data', `stage-${process.pid}-${path.basename(to)}`);
   fs.copyFileSync(from, tmp);
-  try { if (fs.existsSync(to)) fs.rmSync(to, { force: true }); } catch { /* locked by the old app */ }
-  fs.renameSync(tmp, to);
+  try {
+    // Windows replaces an existing file on rename. Do not delete the old exe first:
+    // if the rename loses to a lock, the previous working exe is still there.
+    fs.renameSync(tmp, to);
+  } catch (err) {
+    try {
+      fs.copyFileSync(tmp, to);
+      fs.rmSync(tmp, { force: true });
+    } catch {
+      try { fs.rmSync(tmp, { force: true }); } catch { /* leave it for the next try */ }
+      throw new Error(`could not replace ${to}: ${err.message}`);
+    }
+  }
 }
 
 function apply() {

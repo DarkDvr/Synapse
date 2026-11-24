@@ -33,13 +33,31 @@ message said nothing about it.
 3. **Read `/api/runs` and `/api/pending` immediately before you stop anything** — a
    run can begin between two checks (8 Nov: a t5 started four minutes after one and
    died at the next restart).
-4. `.\shell\build.ps1` then `.\make-release.ps1`; `dist\` gets the zip and
+4. `.\shell\build.ps1` then `.\make-release.ps1`; `dist\` gets **two zips** and
    `SHA256SUMS`.
 5. Commit, tag `vX.Y.Z`, push `main` and the tag. The push is the delivery and does
    not wait.
 6. **A GitHub release is the operator's call.** When they ask: write
-   `docs/release-notes-vX.Y.Z.md`, attach the zip and `SHA256SUMS`, publish — then
+   `docs/release-notes-vX.Y.Z.md`, attach both zips and `SHA256SUMS`, publish — then
    **delete the local note**. The release page is the record.
+
+## Two zips, because old updaters cannot be changed
+
+The updater travels inside each installed copy. A 1.47.2 copy will still use its
+two-minute download timeout and its own extraction code, whatever we ship later. The
+release therefore publishes two assets:
+
+- `Synapse-X.Y.Z-win-x64.zip` — the **update** asset. It contains only what the
+  self-updater replaces: `Synapse.exe`, `src\`, `web\`, `skills\` and the small
+  metadata files. About 5–8 MB, which fits inside every old updater's window.
+- `Synapse-full-win-x64.zip` — the **new install** asset. It has the same contents
+  plus `bin\` (Node, the engine, the browser host) and is about 265 MB.
+
+The full install's name deliberately has **no version in it**. Old updaters pick the
+first zip whose name contains the release tag; only the small update carries the tag,
+so they take the small one. The release notes must link a new install to the full
+asset. The two names are not interchangeable.
+
 
 A docs-only change is a commit, not a release: it moves no behaviour, so the version
 does not move and the exe is not rebuilt.

@@ -199,26 +199,52 @@ export function createSynapseUpdate({ logger, engine, runs, getConfig, notify, q
       // Keep the release's own file name: SHA256SUMS lists that name, and a
       // checksum that cannot be matched is worse than none.
       const zip = path.join(UPDATE_DIR, path.basename(state.asset.name || `${state.latest}.zip`));
+      // A previous attempt that timed out can leave a partial file (and, in the old
+      // updater, an open write stream) behind. Clear it before writing, and say so
+      // plainly rather than downloading into a locked file.
+      try {
+        fs.rmSync(zip, { force: true });
+      } catch (err) {
+        throw new Error(`could not clear the previous download (${err.message}); close Synapse and try again`);
+      }
       onLog(`Downloading Synapse ${state.latest}…`);
       const res = await fetch(state.asset.url, {
         headers: { 'user-agent': 'Synapse', accept: 'application/octet-stream' },
-        signal: AbortSignal.timeout(120_000),
+        // A release is ~265 MB. The old two-minute limit aborted a slow laptop
+        // download, left the partial zip open, and the next attempt then failed
+        // "the zip is missing Synapse.exe" (24 Nov). Fifteen minutes is a stuck
+        // download, not a normal one.
+        signal: AbortSignal.timeout(900_000),
       });
       if (!res.ok || !res.body) throw new Error(`the download answered ${res.status}`);
       const total = Number(res.headers.get('content-length')) || state.asset.size || 0;
       const out = fs.createWriteStream(zip);
       let got = 0;
       let shown = -1;
-      for await (const chunk of res.body) {
-        out.write(chunk);
-        got += chunk.length;
-        const pct = total ? Math.min(100, Math.floor((got / total) * 100)) : -1;
-        if (pct >= 0 && pct !== shown && pct % 5 === 0) {
-          shown = pct;
-          onLog(`Downloading… ${pct}% (${Math.round(got / 1024 / 1024)} MB)`);
+      try {
+        for await (const chunk of res.body) {
+          out.write(chunk);
+          got += chunk.length;
+          const pct = total ? Math.min(100, Math.floor((got / total) * 100)) : -1;
+          if (pct >= 0 && pct !== shown && pct % 5 === 0) {
+            shown = pct;
+            onLog(`Downloading… ${pct}% (${Math.round(got / 1024 / 1024)} MB)`);
+          }
         }
+        await new Promise((resolve, reject) => {
+          out.once('error', reject);
+          out.end(resolve);
+        });
+      } catch (err) {
+        // The stream must not keep the file open: the next look (or the extractor)
+        // would see a locked, half-written zip and report a missing Synapse.exe.
+        try { out.destroy(); } catch { /* already closed */ }
+        try { fs.rmSync(zip, { force: true }); } catch { /* the lock will clear */ }
+        throw err;
       }
-      await new Promise((resolve) => out.end(resolve));
+      if (total && got !== total) {
+        throw new Error(`the download is incomplete (${got} of ${total} bytes)`);
+      }
 
       const digest = await sha256(zip);
       let expected = String(state.asset.digest || '').replace(/^sha256:/i, '').trim();
@@ -243,10 +269,21 @@ export function createSynapseUpdate({ logger, engine, runs, getConfig, notify, q
       fs.mkdirSync(stage, { recursive: true });
       onLog('Unpacking…');
       await runPowerShell(
-        `Expand-Archive -LiteralPath ${shellQuote(zip)} -DestinationPath ${shellQuote(stage)} -Force`,
+        `$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath ${shellQuote(zip)} -DestinationPath ${shellQuote(stage)} -Force`,
+        900_000,
       );
       for (const need of ['Synapse.exe', path.join('src', 'index.js'), path.join('web', 'index.html')]) {
-        if (!fs.existsSync(path.join(stage, need))) throw new Error(`the zip is missing ${need}`);
+        if (fs.existsSync(path.join(stage, need))) continue;
+        const entries = fs.existsSync(stage) ? fs.readdirSync(stage).length : 0;
+        throw new Error(
+          `the zip is missing ${need} (${entries} top-level entries extracted); ` +
+            'check antivirus or Controlled Folder Access, or extract the release by hand',
+        );
+      }
+      const stagedExe = path.join(stage, 'Synapse.exe');
+      const stagedBytes = fs.statSync(stagedExe).size;
+      if (stagedBytes < 500_000) {
+        throw new Error(`the extracted Synapse.exe is incomplete (${stagedBytes} bytes); check antivirus or try again`);
       }
 
       const startedFile = path.join(UPDATE_DIR, 'started');
