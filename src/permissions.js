@@ -717,6 +717,40 @@ function scriptStopsProcesses(segments, ctx) {
 }
 
 /**
+ * The Windows subsystem of a PE file: 2 is GUI, 3 is console, null when the file
+ * cannot be read or is not a PE.
+ *
+ * The screen rule used to treat every `.exe` the project built as a window: a
+ * console test harness, a CLI or a build tool asked for the operator's mouse and
+ * keyboard. Reading the header is one bounded read and lets a console program run
+ * without a screen card (24 Nov).
+ */
+export function programSubsystem(file) {
+  try {
+    const fd = fs.openSync(file, 'r');
+    try {
+      const head = Buffer.alloc(4096);
+      const got = fs.readSync(fd, head, 0, head.length, 0);
+      if (got < 64 || head.toString('ascii', 0, 2) !== 'MZ') return null;
+      const pe = head.readUInt32LE(0x3c);
+      if (pe < 0 || pe + 24 + 68 + 2 > got) return null;
+      if (head.toString('ascii', pe, pe + 4) !== 'PE\0\0') return null;
+      return head.readUInt16LE(pe + 24 + 68);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
+}
+
+function programTakesScreen(file) {
+  const subsystem = programSubsystem(file);
+  // An unreadable program is not assumed harmless; a console subsystem is.
+  return subsystem === null || subsystem === 2;
+}
+
+/**
  * Does this statement run a program the project built?
  *
  * A GUI program takes the screen from the inside, where no command text can be
@@ -741,7 +775,8 @@ function runsProjectProgram(segments, ctx) {
     Boolean(target && !target.unknown && target.path) &&
     program.test(target.path) &&
     zoneOf(target.path, ctx) === 'project' &&
-    (/[\\/]/.test(String(named || '')) || built(target.path));
+    (/[\\/]/.test(String(named || '')) || built(target.path)) &&
+    programTakesScreen(target.path);
   const launchers = new Set(['start-process', 'start', 'cmd', 'explorer']);
   for (const part of segments) {
     if (part.readsOnly) continue;

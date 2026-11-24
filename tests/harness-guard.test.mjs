@@ -66,6 +66,19 @@ test('a shipped tool run from a file URL is not "naming the harness"', () => {
   assert.equal(alarms.length, 0, `a toolbox run was alarmed: ${JSON.stringify(alarms)}`);
 });
 
+test('a shipped tool named through a variable is still tool use', () => {
+  const alarms = [];
+  const guard = createHarnessGuard({ root: ROOT, logger: quiet, notify: (event) => alarms.push(event) });
+  const shot = `${ROOT}\\skills\\visual-review\\bin\\shot.mjs`;
+  const command = [
+    `$shot = '${shot}'`,
+    `Copy-Item .project/shots/a.png .project/shots/b.png -Force`,
+    `node $shot --url .project/mock.html --out .project/shots/b.png 2>&1`,
+  ].join('\n');
+  guard.checkTurn({ sessionId: 'ses_3b', messages: [message('m1', shell('p1', command))], label: 'turn 1' });
+  assert.equal(alarms.length, 0, `a toolbox run was alarmed: ${JSON.stringify(alarms)}`);
+});
+
 // The alarm is for a **write shape**, not for a command the reader did not recognise.
 // On 11 Nov a QC run's own transcript raised the popup: a multi-line block of
 // `git grep`, `Get-Item` and `Select-Object` that happened to name the harness. A

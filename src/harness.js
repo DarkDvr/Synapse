@@ -157,14 +157,14 @@ export function createHarnessGuard({ root, logger, notify }) {
         if (WRITE_TOOLS.test(name) && inHarness(target)) writes.add(String(target));
         if (SHELL_TOOLS.test(name) && harnessPathsIn(input.command).length) {
           const shown = String(input.command).replace(/\s+/g, ' ').slice(0, 160);
-          // A toolbox run is tool use and is not reported. A command that only
-          // *looks* at the toolbox is a read, and is written down: the distinction
-          // is `onlyReads`, not which folder it named.
           // Using the toolbox is ordinary tool use: the renderer, the craft briefs. It is
           // already in the transcript, the census and the session log, so it is not even
-          // written down here — but *listing* the toolbox is a read, and reads are worth a
-          // line, which is how an operator sees a model searching for a tool it lost.
-          if (runsTheToolbox(input.command) && RUNS_HARNESS_CODE.test(String(input.command))) continue;
+          // written down here. A command whose only harness paths are under skills/ is
+          // toolbox work even when it names a script through a variable or copies its
+          // output into the project — the old RUNS_HARNESS_CODE check missed those and
+          // rang a false alarm (24 Nov). The permission ruleset still refuses a write to
+          // skills/, and the snapshot catches anything that gets past it.
+          if (runsTheToolbox(input.command)) continue;
           if (couldWriteHarness(input.command)) shells.add(shown);
           else reads.add(shown);
         }

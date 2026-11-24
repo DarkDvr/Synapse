@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { decide, grantKey, rulesFor, zoneOf, inside, isSecret, analyzeCommand, refusalNote, screenTaking } from '../src/permissions.js';
+import { decide, grantKey, rulesFor, zoneOf, inside, isSecret, analyzeCommand, refusalNote, screenTaking, programSubsystem } from '../src/permissions.js';
 import { protectionEntries } from '../src/protection.js';
 import { scratchDir } from '../src/paths.js';
 import { tmpdir } from './tmpdir.mjs';
@@ -829,6 +829,27 @@ test('running the project\'s own program asks for the screen', () => {
   }
   // Looking at the program is not running it.
   assert.equal(shell(`Get-Item "${exe}"`).effect, 'allow');
+});
+
+test('a console program the project built does not ask for the screen', () => {
+  const dir = tmpdir('synapse-console-program-');
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const cmd = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'cmd.exe');
+  const exe = path.join(bin, 'Check.exe');
+  fs.copyFileSync(cmd, exe);
+  try {
+    assert.equal(programSubsystem(cmd), 3, 'cmd.exe is not read as a console program');
+    const result = shell(`& "${exe}" /c exit 0`, {
+      cwd: dir,
+      projectRoot: dir,
+      scratchRoot: path.join(dir, '.project', 'scratch'),
+    });
+    assert.equal(result.effect, 'allow', 'a console program was treated as a screen grab');
+    assert.notEqual(result.scope, 'desk');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // ── processes ───────────────────────────────────────────────────
