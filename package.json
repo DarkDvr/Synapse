@@ -1,7 +1,10 @@
 {
   "name": "synapse",
-  "version": "1.82.7",
+  "version": "1.82.8",
   "private": true,
+  "runtime": {
+    "engine": "2.2.6"
+  },
   "author": "DarkDvr",
   "license": "AGPL-3.0-only",
   "repository": {

@@ -20,6 +20,21 @@ function read() {
 
 export const APP_VERSION = read();
 
+/** The engine this build was shipped with. A newer npm/desktop engine can change
+ *  the provider and skill config; the release owns the runtime, not the latest tag. */
+function readEngine() {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    return String(pkg.runtime?.engine || '').trim();
+  } catch {
+    // A package without a runtime block (an old install) has no expected engine;
+    // the boot then leaves the existing runtime alone.
+    return '';
+  }
+}
+
+export const ENGINE_VERSION = readEngine();
+
 /**
  * The version on disk *now*, which may be newer than the running server's: the
  * server reads APP_VERSION once at boot, so a page reload can never change the

@@ -8,22 +8,26 @@
 #
 #   .\make-release.ps1
 #   .\make-release.ps1 -Out D:\releases
+#   .\make-release.ps1 -ExePath C:\build\Synapse.exe   # release while the app is running
 [CmdletBinding()]
 param(
-    [string]$Out = (Join-Path $PSScriptRoot 'dist')
+    [string]$Out = (Join-Path $PSScriptRoot 'dist'),
+    [string]$ExePath = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
+$exeSource = if ($ExePath) { (Resolve-Path -LiteralPath $ExePath).Path } else { Join-Path $root 'Synapse.exe' }
 $pkg = Get-Content -LiteralPath (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
 $version = [string]$pkg.version
 if (-not $version) { throw 'package.json has no version' }
 
 $required = @(
-    'Synapse.exe', 'package.json', 'update-apply.ps1', 'update-apply.mjs',
+    'package.json', 'update-apply.ps1', 'update-apply.mjs',
     'config.default.json', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md',
     'src', 'web', 'skills', 'bin\node', 'bin\opencode', 'bin\agent-browser', 'bin\browser-host'
 )
+if (-not (Test-Path -LiteralPath $exeSource)) { throw "missing Synapse.exe at $exeSource - build it first (.\shell\build.ps1)" }
 foreach ($rel in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $rel))) { throw "missing $rel - build it first (.\shell\build.ps1)" }
 }
@@ -43,7 +47,10 @@ $files = @(
     'Synapse.exe', 'package.json', 'update-apply.ps1', 'update-apply.mjs',
     'config.default.json', 'LICENSE', 'NOTICE', 'THIRD-PARTY.md'
 )
-foreach ($file in $files) { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $stage }
+foreach ($file in $files) {
+    $from = if ($file -eq 'Synapse.exe') { $exeSource } else { Join-Path $root $file }
+    Copy-Item -LiteralPath $from -Destination $stage
+}
 # skills carries the shell a Windows app is copied from (skills/win-app/template);
 # there is no separate templates folder any more, and the harness refuses one.
 foreach ($dir in @('src', 'web', 'skills')) {
@@ -129,7 +136,10 @@ Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $fullZip -Compres
 $updateStage = Join-Path $Out "$name-update-stage"
 if (Test-Path -LiteralPath $updateStage) { Remove-Item -LiteralPath $updateStage -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $updateStage | Out-Null
-foreach ($file in $files) { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $updateStage }
+foreach ($file in $files) {
+    $from = if ($file -eq 'Synapse.exe') { $exeSource } else { Join-Path $root $file }
+    Copy-Item -LiteralPath $from -Destination $updateStage
+}
 foreach ($dir in @('src', 'web', 'skills')) {
     Copy-Item -LiteralPath (Join-Path $root $dir) -Destination $updateStage -Recurse
 }

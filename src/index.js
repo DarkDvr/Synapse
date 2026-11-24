@@ -358,6 +358,17 @@ async function main() {
     app.error(`engine failed to start: ${err.message}`);
     app.error('Synapse will still serve the UI so the problem is visible.');
   }
+  // A program-only update leaves bin\ untouched. If this install's engine is not the
+  // one this build was shipped with, put the shipped runtime back before the UI
+  // reads an empty model catalog or skill list.
+  if (!bootError) {
+    try {
+      const { repairRuntime } = await import('./runtime-repair.js');
+      await repairRuntime({ engine, log: app });
+    } catch (err) {
+      app.warn(`runtime repair skipped: ${err.message}`);
+    }
+  }
 
   // An engine that was killed outright leaves its MCP helpers running: they are
   // its children, so they have no owner once it is gone, and nothing else will ever

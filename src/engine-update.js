@@ -29,6 +29,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { DATA_DIR, ROOT, VENDOR_ENGINE } from './paths.js';
 import { hasNpm } from './npm-check.js';
+import { APP_VERSION, ENGINE_VERSION } from './version.js';
 
 const REGISTRY = 'https://registry.npmjs.org/@opencode/cli';
 const CACHE_FILE = path.join(DATA_DIR, 'engine-update.json');
@@ -318,6 +319,22 @@ export function createEngineUpdate({ engine, logger, runs, notify }) {
         ok: false,
         error: `A session is mid-turn (${active.length} active). Stop it first — restarting the engine would lose that turn.`,
       };
+    }
+
+    // The engine is part of a Synapse release, not a free-floating latest. A newer
+    // engine can change the provider and skill config before Synapse knows how to
+    // read it (1.47.2 installed 2.4.1, then 1.82.7 showed no models and no skills).
+    // Update Synapse first; its full runtime carries the matching engine.
+    if (ENGINE_VERSION) {
+      const online = await check({ online: true }).catch(() => null);
+      if (online?.latest && compareVersions(online.latest, ENGINE_VERSION) > 0) {
+        return {
+          ok: false,
+          error:
+            `This Synapse (${APP_VERSION}) is built for engine ${ENGINE_VERSION}, and npm offers ${online.latest}. ` +
+            'Update Synapse first — its full runtime carries the matching engine.',
+        };
+      }
     }
 
     log.info(`engine update: ${before.version || 'unknown'} -> npm latest`);

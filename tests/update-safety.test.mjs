@@ -42,3 +42,20 @@ test('the release publishes a small tagged update and an untagged full install',
   assert.match(script, /SHA256SUMS[\s\S]*\$fullName\.zip[\s\S]*\$name\.zip/, 'both hashes are published');
 });
 
+test('the app repairs a runtime that does not match the release', () => {
+  const repair = read('src/runtime-repair.js');
+  assert.match(repair, /Synapse-full-win-x64\.zip/);
+  assert.match(repair, /ENGINE_VERSION/);
+  assert.match(repair, /bin.*opencode/, 'the engine is replaced');
+  assert.match(repair, /engine\.stop\(\)[\s\S]*engine\.start\(\)/, 'the engine is stopped before the binary changes');
+  const boot = read('src/index.js');
+  assert.match(boot, /repairRuntime\(\{ engine, log: app \}\)/, 'boot calls it before the UI reads the catalog');
+});
+
+test('a newer engine cannot be installed before the Synapse that understands it', () => {
+  const src = read('src/engine-update.js');
+  assert.match(src, /Update Synapse first/);
+  assert.match(src, /compareVersions\(online\.latest, ENGINE_VERSION\) > 0/);
+});
+
+
