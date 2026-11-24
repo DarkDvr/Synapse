@@ -2639,10 +2639,12 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // an absolute path can still land, so the folder is compared around the turn
     // the way the harness repository is.
     const synapseAfter = synapseFingerprint(dir);
-    // Two folders in .project are nobody's in particular: the screenshots a render
-    // leaves, and the evidence every role is told to keep. A write there is the
-    // brief being followed, not a stray write.
-    const sharedDirs = [SHARED_DIR, EVIDENCE_DIR].map((d) => d.split('/').pop());
+    // Four folders in .project are nobody's in particular: the screenshots a render
+    // leaves, the evidence every role is told to keep, the scratch every role is
+    // explicitly allowed to write, and the shell logs the harness writes. A change
+    // there is the brief being followed, not a stray write. Leaving scratch out made
+    // every QC run report its own permitted work as tampering (24 Nov).
+    const sharedDirs = [SHARED_DIR, EVIDENCE_DIR, 'scratch', 'logs'].map((d) => d.split('/').pop());
     const strayWrites = fingerprintDiff(synapseBefore, synapseAfter, ownedFolder(role))
       .filter((p) => !sharedDirs.some((d) => p === d || p.startsWith(`${d}/`)))
       .filter((p) => !HARNESS_FILES.has(p))

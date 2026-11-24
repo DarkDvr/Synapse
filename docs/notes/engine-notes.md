@@ -567,6 +567,10 @@ Measured on 2.0.30, and not guessable:
   after a worker turn — prevention for the file tools, detection for the rest. **Verified live:** a coder
   rule refused `.project/probe/x.txt` twice (`write:error`) while the same write with an absolute path got
   through.
+- **Scratch and shell logs are exempt from that fingerprint.** The role rules allow
+  `.project/scratch/**`; the fingerprint originally compared every file and reported a QC
+  run's own permitted scratch as a stray write (24 Nov). `shots`, `reports`, `scratch` and
+  `logs` are the shared folders the comparison skips.
 
 ### The permission policy
 
