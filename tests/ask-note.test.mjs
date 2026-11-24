@@ -107,6 +107,14 @@ test('a permission card counts down to its automatic Allow Once', () => {
   // The sentence is written once, in the module, like the question's.
   assert.match(read('src/api.js'), /autoPermissionsAt: permissionGate\?\.autoAllowAt/);
   assert.match(read('src/permission-gate.js'), /autoAllowAt: \(id\) => pendingAsks\.get\(id\)\?\.autoAt \?\? null/);
+  // The head is two rows: role/task stay whole on the first, the countdown gets
+  // the second. A wrapped "QC needs your screen" or a vertical "r3" is the old
+  // flex squeeze (24 Nov).
+  const css = read('web/synapse.css');
+  assert.match(css, /\.perm-head \{[^}]*grid-template-areas:/);
+  assert.match(css, /\.perm-head-text \{[^}]*white-space: nowrap/);
+  assert.match(css, /\.perm-head-note \{[^}]*grid-area: note/);
+  assert.match(css, /\.perm-who \{[^}]*white-space: nowrap/);
 });
 
 // 4 Nov: on a remote PC the countdown said "picked now" the moment it started.

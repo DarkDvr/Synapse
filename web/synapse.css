@@ -1994,13 +1994,52 @@ details:not([open]) > [data-fold-body] { display: none; }
   margin: 6px 0; padding: 10px 11px; border-radius: 8px;
   background: #241f16; border: 1px solid #5a4725;
 }
-.perm-head { display: flex; align-items: center; gap: 8px; font-size: calc(var(--chat-fs) * 0.92); font-weight: 700; color: var(--amber); }
-/* The countdown sits in the head's right corner, like the question's note: same
-   row, same idea, so the two cards read the same way (3 Nov). */
-.perm-head-note { margin-left: auto; flex: none; font-size: calc(var(--chat-fs) * 0.85); font-weight: 500; color: #8a8e96; }
-/* The task tag shares that corner; when a countdown is present it steps left. */
-.perm-head:has(.perm-head-note) .perm-who { margin-left: 0; }
-.perm-who { margin-left: auto; font-weight: 600; font-size: calc(var(--chat-fs) * 0.88); color: #b6babf; overflow-wrap: anywhere; }
+/* The head is two rows: the role, and its task tag on the right; the countdown,
+   when there is one, takes the second row instead of squeezing both into one
+   line. At a narrow width the role and the tag stay whole and ellipsise, and the
+   countdown ellipsises as one line — no wrapped "r3" or two-line "QC needs your
+   screen" (24 Nov). */
+.perm-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "dot text who"
+    ". note note";
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
+  font-size: calc(var(--chat-fs) * 0.92);
+  font-weight: 700;
+  color: var(--amber);
+}
+.perm-head > .status-dot { grid-area: dot; }
+.perm-head-text {
+  grid-area: text;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The countdown sits on its own row under the role, like the question's note. */
+.perm-head-note {
+  grid-area: note;
+  min-width: 0;
+  font-size: calc(var(--chat-fs) * 0.85);
+  font-weight: 500;
+  color: #8a8e96;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The task tag stays one line; it is an id, not prose. */
+.perm-who {
+  grid-area: who;
+  margin: 0;
+  font-weight: 600;
+  font-size: calc(var(--chat-fs) * 0.88);
+  color: #b6babf;
+  white-space: nowrap;
+}
 .perm-lead { margin: 7px 0 0; font-size: calc(var(--chat-fs) * 1.04); line-height: 1.45; color: var(--text); }
 .perm-why { margin: 6px 0 0; font-size: calc(var(--chat-fs) * 0.92); line-height: 1.45; color: #b6babf; }
 .perm-waking { margin: 8px 0 0; font-size: calc(var(--chat-fs) * 0.88); line-height: 1.4; color: var(--amber); }
