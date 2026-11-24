@@ -1,6 +1,6 @@
 {
   "name": "synapse",
-  "version": "1.82.8",
+  "version": "1.82.9",
   "private": true,
   "runtime": {
     "engine": "2.2.6"
