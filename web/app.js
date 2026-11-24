@@ -382,7 +382,11 @@ function noteAttention() {
   }
   for (const key of [...awaitingJudge]) {
     const project = state.projects.find((p) => dirKey(p.directory) === key);
-    const busy = Boolean(project) && (project.sessions || []).some((s) => state.busySessions.has(s.id));
+    // Only the chat's own turn clears the report wait. A worker session can still be
+    // in the engine's active list for a moment after its run finished, and treating
+    // that as the Architect would let the chime through too early.
+    const busy = Boolean(project) &&
+      (project.sessions || []).some((s) => !s.internal && state.busySessions.has(s.id));
     if (busy) {
       awaitingJudge.delete(key);
       awaitingSince.delete(key);

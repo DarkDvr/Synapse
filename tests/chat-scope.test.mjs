@@ -309,6 +309,12 @@ test('a report waiting for the Architect is work, and the grace is short', () =>
   assert.equal(states.get(key)?.working, true, 'the report gap looked like a finish');
   // The old ten-second timer is gone: the pending judgment is tracked directly.
   assert.ok(FINISH_GRACE_MS <= 2000, `the grace is ${FINISH_GRACE_MS}ms; it must not delay a real finish`);
+
+  const workerStillBusy = chatStates({
+    projects: [{ directory: B, sessions: [{ id: 'ses_worker', internal: true }] }],
+    busySessions: new Set(['ses_worker']),
+  });
+  assert.equal(workerStillBusy.get(key)?.working, false, 'a lingering worker session is not the Architect');
 });
 
 test('the waiting post says how many turns are ahead', async () => {

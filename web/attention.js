@@ -37,7 +37,12 @@ export function chatStates({ projects = [], runs = null, busySessions = null, pe
     out.set(key, {
       // A worker's report wakes the Architect to judge it. Until that turn starts,
       // the chat is not idle: the workflow has more work even though no run is live.
-      working: live.has(key) || judging.has(key) || (project.sessions || []).some((s) => busy.has(s.id)),
+      // Only the project chat counts here; a worker's own session is scaffolding and
+      // may linger in the engine's active list after its run has ended.
+      working:
+        live.has(key) ||
+        judging.has(key) ||
+        (project.sessions || []).some((s) => !s.internal && busy.has(s.id)),
       blocked: blocked.has(key),
     });
   }
