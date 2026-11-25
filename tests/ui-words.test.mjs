@@ -173,7 +173,10 @@ contract('a steer is on screen before the engine echoes it', () => {
   const js = ui();
   assert.match(js, /local-steer-/);
   assert.match(js, /startsWith\('local-steer-'\)/);
-  assert.match(js, /text: `\[steer\] \$\{text\}`/);
+  // A file-only steer is the marker with no trailing sentence, which is the form
+  // the engine echoes back; a spoken one keeps its words.
+  assert.match(js, /text: text \? `\[steer\] \$\{text\}` : '\[steer\]'/);
+  assert.match(js, /pending: true/, 'the post starts pending so it can breathe until read');
 });
 
 // 4 Nov: the answer box behind "Something Else" is prose. Enter is a newline and

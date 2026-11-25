@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { createRunner } from '../src/runs.js';
 import { briefSession, appendRun } from '../src/plans.js';
 import { OpenCodeEngine } from '../src/engines/opencode.js';
+import { steerNotes } from '../web/traces.js';
 import { tmpdir } from './tmpdir.mjs';
 
 const ROOT = tmpdir('synapse-steer-test-');
@@ -220,9 +221,45 @@ test('a steer is on the trace before the worker has read it', async () => {
     events.some((e) => e.type === 'run.steer' && e.text === 'change of plan' && !e.failed),
     'the line is broadcast before delivery',
   );
+  assert.ok(
+    !events.some((e) => e.type === 'run.steer' && e.delivered),
+    'taking the request is not the same as the model reading it',
+  );
   assert.ok(runs(dir).some((r) => r.kind === 'steer'), 'and journalled');
   release();
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  const delivered = await waitFor(() => events.find((e) => e.type === 'run.steer' && e.delivered));
+  assert.ok(delivered, 'the page is told when the worker reached the steer');
+  assert.equal(delivered.text, 'change of plan');
+  stub.finish(live.workerId);
+});
+
+test('a steer can be a file with no sentence, and still waits for the read', async () => {
+  const dir = project('file-only');
+  const stub = makeEngine(dir);
+  const events = [];
+  const runner = runnerFor(stub.engine, dir, events);
+  await runner.handleTurn('ses_arch', archMessages('call_file_only'));
+  const live = await waitFor(() => runner.active().find((r) => r.workerId));
+  assert.ok(live, 'the run should have a worker session');
+
+  const saved = [{ name: 'note.txt', path: path.join(dir, '.project', 'attachments', 'note.txt') }];
+  const result = await runner.steer(dir, {
+    text: '',
+    files: [{ name: 'note.txt', mime: 'text/plain', data: 'aGVsbG8=' }],
+    saved,
+    actor: { name: 'PC-A' },
+  });
+  assert.equal(result.ok, true, 'an attachment is a steer even without words');
+  assert.equal(result.target, 'worker');
+  const sent = stub.prompts.find((p) => p.id === live.workerId && p.delivery === 'steer');
+  assert.ok(sent, 'the worker should receive the attachment');
+  assert.equal(sent.text, '[steer]', 'a file-only steer has the marker and no trailing sentence');
+  assert.deepEqual(sent.files, [{ name: 'note.txt', mime: 'text/plain', data: 'aGVsbG8=' }]);
+  assert.ok(events.some((e) => e.type === 'run.steer' && e.files?.length === 1), 'the chip is on the run before the read');
+  const delivered = await waitFor(() => events.find((e) => e.type === 'run.steer' && e.delivered));
+  assert.ok(delivered, 'the file-only steer also reports when it was read');
+  assert.equal(steerNotes({ steers: [{ text: '', files: saved, deliveredAt: 1 }] })[0].pending, undefined);
+  assert.equal(steerNotes({ steers: [{ text: '', files: saved }] })[0].pending, true);
   stub.finish(live.workerId);
 });
 
@@ -415,6 +452,24 @@ test('the composer says what a steer will do', () => {
   assert.match(app, /steerNotes/);
   assert.match(css, /\.trace-line\.is-steer/);
   assert.match(app, /\/steer`/);
+});
+
+test('a steer is painted before the request, and breathes until it is read', () => {
+  const composer = fs.readFileSync(path.join(process.cwd(), 'web', 'composer.js'), 'utf8');
+  const transcript = fs.readFileSync(path.join(process.cwd(), 'web', 'transcript.js'), 'utf8');
+  const css = fs.readFileSync(path.join(process.cwd(), 'web', 'synapse.css'), 'utf8');
+  const steerStart = composer.indexOf('async function sendSteer');
+  assert.ok(steerStart > 0, 'the steer function is there');
+  const paint = composer.indexOf('state.messages.push(post)', steerStart);
+  const request = composer.indexOf('const sent = await api(', steerStart);
+  assert.ok(paint > 0, 'the Architect steer is given a post');
+  assert.ok(request > 0, 'the steer is still sent to the server');
+  assert.ok(paint < request, 'the post is on screen before the request that can take minutes');
+  assert.match(composer, /pending: true/, 'the new post starts pending');
+  assert.match(composer, /delete post\.pending/, 'the breath ends when the request comes back');
+  assert.match(transcript, /is-pending/);
+  assert.match(css, /steer-breathe/);
+  assert.match(css, /\.trace-line\.is-steer\.is-pending \.msg-steer/);
 });
 
 // 30 Oct: a steer fell into the trace's "N earlier steps" fold while the run went

@@ -52,11 +52,13 @@ test('the page and the runner agree on the line, so one steer is one line', () =
   assert.ok(painted > -1, 'nothing is painted into the trace');
   assert.ok(sent > -1, 'the request is gone');
   assert.ok(painted < sent, 'the line is painted after the round trip, not before it');
-  assert.match(body, /delete painted\.pending/, 'the line never stops being pending');
-  assert.match(body, /trace\.notes\.indexOf\(painted\)/, 'a refused steer is not taken back off');
+  // The first event only says the server took it. The breath ends on the second,
+  // when the worker reaches the boundary where it reads the steer.
+  assert.match(body, /const sent = await api/, 'the steer is still sent');
   const runs = read('web/live-runs.js');
   assert.match(runs, /const existing = trace\.notes\.find\(\(n\) => n\?\.steer && n\.text === line\)/, 'the runner pushes a duplicate');
-  assert.match(runs, /delete existing\.pending/, 'the runner never confirms the painted line');
+  assert.match(runs, /if \(ev\.delivered\) delete existing\.pending/, 'the runner never confirms the painted line');
+  assert.match(runs, /\.\.\.\(ev\.delivered \? \{\} : \{ pending: true \}\)/, 'a steer from another view starts pending');
   assert.match(runs, /steerLine\(ev\.text\)/, 'the runner builds its own line instead of the shared one');
 });
 

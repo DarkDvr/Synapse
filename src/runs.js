@@ -4059,7 +4059,8 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
       return { ok: false, reason: 'The worker is waiting out a provider limit; Stop it or wait.' };
     }
     const said = String(text || '').trim();
-    if (!said) return { ok: false, reason: 'The steer is empty.' };
+    const hasFiles = (Array.isArray(files) && files.length > 0) || (Array.isArray(saved) && saved.length > 0);
+    if (!said && !hasFiles) return { ok: false, reason: 'The steer is empty.' };
     const at = Date.now();
     // The saved copies, not the base64: the run card and the project record point at
     // `.project/attachments/`, and a steer is small enough that the bytes belong in
@@ -4074,14 +4075,29 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     // reads it at its next step — minutes on a long tool call — so waiting for the
     // engine made the operator's sentence appear long after they pressed the
     // button, with nothing to show it had landed (4 Nov). The line is painted now,
-    // and taken back if the engine refuses it.
+    // and taken back if the engine refuses it. A file-only steer has no sentence,
+    // so its chip is the only thing on the line; it is still a steer.
     live.steers.push(entry);
     live.steered = live.steers.length;
     appendRun(dir, { kind: 'steer', scope: 'worker', task: live.task, role: live.role, ...entry });
     emit('run.steer', { dir, task: live.task, role: live.role, startedAt: live.startedAt, ...entry });
-    out.info(`steer -> ${live.task} (${live.role}) from ${entry.by || 'operator'}: ${said.slice(0, 120)}`);
+    out.info(`steer -> ${live.task} (${live.role}) from ${entry.by || 'operator'}: ${said.slice(0, 120) || `${saved?.length || files?.length || 0} file(s)`}`);
     engine
-      .prompt(live.workerId, `[steer] ${said}`, { files, delivery: 'steer' })
+      .prompt(live.workerId, said ? `[steer] ${said}` : '[steer]', { files, delivery: 'steer' })
+      .then(() => {
+        // The prompt comes back when the worker reaches the boundary where it reads
+        // the steer. That is the moment the UI's breath can stop: not when the
+        // request was accepted, which is seconds or minutes earlier.
+        entry.deliveredAt = Date.now();
+        emit('run.steer', {
+          dir,
+          task: live.task,
+          role: live.role,
+          startedAt: live.startedAt,
+          ...entry,
+          delivered: true,
+        });
+      })
       .catch((err) => {
         const where = live.steers.indexOf(entry);
         if (where >= 0) live.steers.splice(where, 1);

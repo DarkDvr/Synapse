@@ -283,13 +283,15 @@ export async function send() {
  */
 async function sendSteer(text, files, target) {
   const input = $('promptInput');
-  // A worker steer goes to a session the operator cannot see, so the only place it can
-  // appear is that run's trace — and it appears *now*, before the request is even sent.
-  // Waiting for the runner to report it took it meant the operator pressed Steer, got a
-  // toast, and watched an unchanged chat for a minute: no evidence their words had gone
-  // anywhere (10 Nov). The note is `pending` until the run confirms, and comes off if
-  // the server refuses it.
+  // The line is painted the moment the operator presses Steer, before the request.
+  // The engine's steer prompt does not come back until the model reaches its next
+  // step, so waiting for the answer left the chat unchanged for minutes — and with
+  // only an attachment there was no sentence to notice missing, which is why it
+  // read as a lost steer rather than a late one. `pending` is the breath; it ends
+  // when the server says the model has taken the turn.
   let painted = null;
+  let post = null;
+  const chips = (files || []).map((f) => ({ name: f.name, mime: f.mime }));
   if (target?.kind === 'worker') {
     const trace = traceOf(currentRun());
     if (trace) {
@@ -298,29 +300,55 @@ async function sendSteer(text, files, target) {
         steer: true,
         text: steerLine(text),
         pending: true,
-        files: (files || []).map((f) => ({ name: f.name, mime: f.mime })),
+        files: chips,
       };
       trace.notes.push(painted);
       if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);
-      renderTranscript();
-      scrollChatToEnd();
     }
+  } else {
+    // The engine only writes the operator's words into the transcript when it
+    // delivers them, so the page paints the sentence now and keeps it until the
+    // real message arrives (see loadMessages). No trailing space on a file-only
+    // steer: that is the form the engine echoes back.
+    post = {
+      id: `local-steer-${Date.now()}`,
+      type: 'user',
+      text: text ? `[steer] ${text}` : '[steer]',
+      created: Date.now(),
+      pending: true,
+      // The picture is part of the sentence here too: the chip is drawn from the
+      // same files the send carried, so a steer reads exactly like a message.
+      files: chips,
+      _files: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })),
+    };
+    state.messages.push(post);
   }
+  renderTranscript();
+  scrollChatToEnd();
+
+  // The line is on screen, so the box can let go of the draft. If the server
+  // refuses it, the draft comes back rather than being eaten by a failed steer.
+  const draft = { text, files };
+  input.value = '';
+  autoGrow(input);
+  state.attachments = [];
+  renderAttachments();
   try {
     const sent = await api('POST', `/api/sessions/${encodeURIComponent(state.sessionId)}/steer`, {
       text,
       files: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data, keep: f.keep === true })),
     });
-    input.value = '';
-    autoGrow(input);
-    // Only after the server took them: a failed steer must not eat the files.
-    state.attachments = [];
-    renderAttachments();
     if (painted) {
-      // Taken: the line stops being pending, and the pictures the runner saved in the
-      // project replace the name-only chips, so the hover works as it does anywhere.
-      delete painted.pending;
+      // The runner's saved copies replace the name-only chips, so the hover works
+      // as it does anywhere. The line stays pending until the worker reports that
+      // the model reached it (run.steer delivered).
       if (Array.isArray(sent?.files) && sent.files.length) painted.files = sent.files;
+      renderTranscript();
+    }
+    if (post) {
+      // The Architect's prompt came back, which is the engine's next step: the
+      // model has the steer now, so the breath can stop.
+      delete post.pending;
       renderTranscript();
     }
     toast(
@@ -330,32 +358,27 @@ async function sendSteer(text, files, target) {
         : 'The Architect will see it mid-turn.',
     );
     if (sent?.target !== 'worker') {
-      // The engine only writes the operator's words into the transcript when it
-      // delivers them, so the page paints the sentence now and keeps it until the
-      // real message arrives (see loadMessages).
-      state.messages.push({
-        id: `local-steer-${Date.now()}`,
-        type: 'user',
-        text: `[steer] ${text}`,
-        created: Date.now(),
-        // The picture is part of the sentence here too: the chip is drawn from the
-        // same files the send carried, so a steer reads exactly like a message.
-        files: files.map((f) => ({ name: f.name, mime: f.mime })),
-        _files: files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })),
-      });
-      renderTranscript();
-      scrollChatToEnd();
       await wired.loadMessages();
       scrollChatToEnd();
     }
   } catch (err) {
     // The line was a promise, and the promise was refused: take it back off rather
-    // than leave a sentence in the trace that no worker ever read.
+    // than leave a sentence that no worker ever read.
     if (painted) {
       const trace = traceOf(currentRun());
       const at = trace ? trace.notes.indexOf(painted) : -1;
       if (at >= 0) trace.notes.splice(at, 1);
-      renderTranscript();
+    }
+    if (post) {
+      state.messages = (state.messages || []).filter((m) => m !== post);
+    }
+    renderTranscript();
+    // Only restore if they have not typed or attached something new meanwhile.
+    if (!input.value.trim() && !state.attachments.length) {
+      input.value = draft.text;
+      state.attachments = draft.files;
+      renderAttachments();
+      autoGrow(input);
     }
     if (err.status === 409 && err.body?.notBusy) {
       toast('Nothing Is Running', 'Press Send again to send it as a message.');

@@ -374,7 +374,10 @@ records the evidence, and wakes the Architect.
 - **A steer is on the trace before the model reads it.** The prompt does not come back until the next step,
   so waiting left the chat silent for minutes after the button (4 Nov). The run line is pushed, journalled
   and broadcast at the press; the prompt is awaited in the background, and a refusal takes the line back
-  with a toast. An Architect steer paints the sentence at once.
+  with a toast. An Architect steer paints the sentence at once. A second `run.steer` with `delivered: true`
+  follows when the prompt returns, which is the boundary where the worker reads it; that is what ends the
+  UI's breathing, not the first event. A file-only steer is the same path with an empty sentence: the
+  marker is `[steer]`, the files carry it, and `runs.steer` accepts it.
 - **An automatic answer is not the operator speaking.** After Auto-Answer replies, a synthetic line says
   the operator is away and the harness chose the recommended options, because without it the next turn
   reasoned about a decision nobody had made.
@@ -917,9 +920,10 @@ and `queue` the alternative. Measured on 2.1.2 and again on 2.2.3:
 - `queue` waits for the turn to end, which makes it a normal follow-up message with ceremony.
 - Neither can preempt a tool call or a generation. **Stop is the hard interrupt.**
 
-Synapse sends a steer with the marker `[steer] ` in front of the operator's words. The briefs define it:
-guidance for the task in flight, not a new task; apply it, say in the report what changed, do not restart.
-The report quotes every steer and the Architect judges against the latest instruction. **Who may steer:**
+Synapse sends a steer with the marker `[steer]` and a space before the operator's words. A file-only steer
+has no words, so the marker stands alone and the files are the message. The briefs define it: guidance for
+the task in flight, not a new task; apply it, say in the report what changed, do not restart. The report
+quotes every steer and the Architect judges against the latest instruction. **Who may steer:**
 anyone looking at the project — the first cut allowed only the computer that started the work, and the
 operator removed that check on 30 Oct, choosing reach over ownership. The computer name stays on the steer
 line as an audit fact. The composer becomes **Steer** with a yellow border in every view while the work
@@ -939,8 +943,9 @@ and the composer targets the live run. Measured live (2.2.3): a coder writing 40
 steered with "put `STEERED` at the top"; the file came back 401 lines with `STEERED` first.
 `tests/steer.test.mjs` pins the runner side and the briefs. **A steer is seen** on that worker's run trace
 with the yellow `STEER:` marker — not a "You" message, because the worker has its own session — and it
-survives a reload through `/api/runs`; if the run stops before the report, the next brief carries "the
-operator's steer to the last run still stands".
+survives a reload through `/api/runs`; its tag breathes while `deliveredAt` is absent, and stops when the
+runner reports the read. If the run stops before the report, the next brief carries "the operator's steer
+to the last run still stands".
 
 ## A long command is a lease, not a stall
 

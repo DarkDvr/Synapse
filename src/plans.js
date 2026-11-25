@@ -1301,7 +1301,10 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     if (steers.length) {
       const said = steers
         .slice(-3)
-        .map((s) => `"${String(s.text || '').replace(/\s+/g, ' ').trim()}"`)
+        .map((s) => {
+          const words = String(s.text || '').replace(/\s+/g, ' ').trim();
+          return words ? `"${words}"` : 'a file, with no words';
+        })
         .join('; ');
       lines.push(
         `The operator's steer to the last run still stands: ${said}. Put it in the task note and the plan.`,

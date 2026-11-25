@@ -352,6 +352,9 @@ export const steerNotes = (run) =>
   (Array.isArray(run?.steers) ? run.steers : []).map((s) => ({
     steer: true,
     text: s.text,
+    // A live run that has not reported delivery yet: the line breathes until the
+    // runner's `run.steer` says the worker reached it (25 Nov).
+    ...(s.deliveredAt ? {} : { pending: true }),
     ...(Array.isArray(s.files) && s.files.length ? { files: s.files } : {}),
   }));
 export function traceOf(run) {

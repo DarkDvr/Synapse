@@ -1,9 +1,9 @@
-// Builds that land under a running window leave the old image behind.
+// Builds are made with the window closed.
 //
-// Windows will not replace a running exe, so the builder renames it aside and puts
-// the new one at the root. The running window keeps the old image until it exits;
-// after that the old file is litter. The next launch removes it, and the same for
-// the browser-host folder.
+// Windows will not replace a running exe, and the app must not swap files under a
+// live process: the shell is built only when the operator says so, with the window
+// closed. Old `.old-` images from an earlier attempt are still removed at the next
+// start, and the browser-host folder is replaced only when nothing holds it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -20,9 +20,9 @@ test('the shell removes old build files at startup', () => {
   assert.match(start, /CleanOldBuilds\(\)/, 'cleanup is not run before the new window starts');
 });
 
-test('a build stages over a running exe instead of requiring a stop', () => {
+test('a build does not swap files under a running app', () => {
   const build = read('shell/build.ps1');
-  assert.match(build, /Synapse was running; the old exe is/, 'the build still assumes the app is stopped');
-  assert.match(build, /Move-Item \$target \$old/, 'the locked exe is not moved aside');
-  assert.match(build, /dist-host/, 'the browser host is published straight into its locked folder');
+  assert.doesNotMatch(build, /Synapse was running; the old exe is/, 'the build still swaps under a running app');
+  assert.doesNotMatch(build, /Move-Item \$target \$old/, 'a locked exe is moved aside again');
+  assert.doesNotMatch(build, /\.old-/, 'the build never stages beside the live binary');
 });

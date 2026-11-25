@@ -1615,6 +1615,23 @@ body[data-mode="single"] #runAuto { display: none; }
   height: calc(var(--chat-fs) * 1.5);
   vertical-align: middle;
 }
+/* A steer is on screen before the engine has read it. The tag breathes and the
+   rule goes faint until the model reaches the next step; then both stop, so the
+   animation itself is the receipt (25 Nov). The trace row uses the same breath
+   and stops when the runner reports the worker took it. */
+.msg.user.is-steer.is-pending .msg-body { border-left-color: var(--violet-line); }
+.msg.user.is-steer.is-pending .msg-steer,
+.trace-line.is-steer.is-pending .msg-steer {
+  animation: steer-breathe 1.5s ease-in-out infinite;
+}
+@keyframes steer-breathe {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .msg.user.is-steer.is-pending .msg-steer,
+  .trace-line.is-steer.is-pending .msg-steer { animation: none; opacity: 0.7; }
+}
 /* A worker's lease: the one chat line with a clock. Yellow, the same as Synapse's
    own messages — the line is the harness speaking, not the operator. It counts
    down in place, and when it runs out it turns amber: the worker is being asked

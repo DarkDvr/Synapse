@@ -252,11 +252,16 @@ clock and picker joined into one row.
   yellow rule as the permission log drawn over the trace's grey one and reaching back 12px —
   one rule that turns yellow where the operator spoke. Every steer stays in the open tail,
   and a finished trace says `· steered` on its folded line so the words cannot vanish.
-- **A steer appears when it is sent.** The page paints it into the trace *before* the
-  request, marked `pending` (a faint violet edge, a tooltip saying the worker reads it at
-  its next step); a refusal takes the line off with a toast; confirmation **adopts** that
-  line instead of pushing a second one. `steerLine()` in `traces.js` builds the text for
-  both sides, because two builders drift by half a character and read as duplicates.
+- **A steer appears when it is sent.** The page paints it into the transcript or the
+  trace *before* the request, marked `pending`; the `STEER:` tag breathes and its rule
+  goes faint until the model has it. The Architect's request returns at the engine's
+  next step; a worker reports `run.steer` twice — once when the server took it, once
+  with `delivered` when the worker reached the boundary where it reads it. Only the
+  second ends the breath. A refusal takes the line off with a toast, and confirmation
+  **adopts** that line instead of pushing a second one. A file-only steer has no
+  sentence: the tag and its chip are the whole line, and it is still a steer. `steerLine()`
+  in `traces.js` builds the text for both sides, because two builders drift by half a
+  character and read as duplicates.
 - **A compaction is a moment, not a banner.** It wears the tool head's shape — a
   small yellow dot, `Compacting ×2`, and `context at 173K/205K` as the target — because
   that is the row the operator already reads as "something happened here". It has no

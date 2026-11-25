@@ -550,7 +550,10 @@ export function renderMessage(m, tail = '', extras = '') {
     // sentence, so the browser aligns it with the first line by itself instead of
     // a flex row's top edge lifting a 9.5px word above a 13.5px one (30 Oct).
     const lead = steer ? '<span class="msg-steer">STEER:</span> ' : '';
-    return `<div class="msg user${steer ? ' is-steer' : ''}"${line} data-msg="user"><div class="msg-body">
+    // A steer the page painted before the engine had read it breathes until the
+    // engine's own message lands (or the steer request returns, for the Architect).
+    const pending = m.pending ? ' is-pending' : '';
+    return `<div class="msg user${steer ? ' is-steer' : ''}${pending}"${line} data-msg="user"><div class="msg-body">
       ${stamp}<span class="msg-role">You</span><span class="msg-text">${lead}${esc(said)}</span>${chips}${reuse}
     </div></div>`;
   }

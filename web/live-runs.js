@@ -654,7 +654,9 @@ export function handleRunEvent(ev) {
         // line, a minute apart, saying the same sentence (10 Nov).
         const existing = trace.notes.find((n) => n?.steer && n.text === line);
         if (existing) {
-          delete existing.pending;
+          // The first event is "the server took it"; the second is "the worker
+          // reached the next step and read it". Only the second ends the breath.
+          if (ev.delivered) delete existing.pending;
           if (Array.isArray(ev.files) && ev.files.length) existing.files = ev.files;
         } else {
           // A steer sent from another view, or one whose page never painted it.
@@ -662,6 +664,7 @@ export function handleRunEvent(ev) {
             at: Date.now(),
             steer: true,
             text: line,
+            ...(ev.delivered ? {} : { pending: true }),
             ...(Array.isArray(ev.files) && ev.files.length ? { files: ev.files } : {}),
           });
           if (trace.notes.length > 60) trace.notes.splice(0, trace.notes.length - 60);

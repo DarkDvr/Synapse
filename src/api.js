@@ -2906,7 +2906,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         throw err;
       }
       try {
-        await engine.prompt(targetId, `[steer] ${text}`, { files: attachments, delivery: 'steer' });
+        await engine.prompt(targetId, text ? `[steer] ${text}` : '[steer]', { files: attachments, delivery: 'steer' });
       } catch (err) {
         const wrapped = new Error(`could not reach the session: ${err.message}`);
         wrapped.status = 502;

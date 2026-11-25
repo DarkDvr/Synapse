@@ -44,7 +44,7 @@ Ids are stable: they are the ticket and scenario names. `M` = must, `P` = pain t
 | Id | Comes from | What appears | Must (M) / Pain (P) |
 |---|---|---|---|
 | A1 | a `user` message | violet rule, "You", time, the sentence | M: same spine and header as every post; text selectable; time on the header line at every size |
-| A2 | text starting `[steer]` | the same post with a "STEER:" tag | M: tag on the first line, sharing a baseline; wrapping is the sentence's |
+| A2 | text starting `[steer]` | the same post with a "STEER:" tag | M: tag on the first line, sharing a baseline; wrapping is the sentence's; a file-only steer is the tag plus its chip; the tag breathes while the model has not read it |
 | A3 | files on a message | chips: type tag, name, hover picture, click opens | M: chips do not disturb the baseline; a picture is a chip, never a thumbnail in the flow |
 | A4 | a message just sent, not yet in the engine | the operator's post already there | M: the engine's copy replaces it with no flash, no duplicate, no lost scroll |
 | A5 | an `assistant` message | green rule, "Architect", time, blocks | M: the same shape live or finished — no second block, no second head |
@@ -106,7 +106,7 @@ Ids are stable: they are the ticket and scenario names. `M` = must, `P` = pain t
 | E5 | a PROHIBITED refusal | red line: "PROHIBITED · <tool> · <target>", folds open | M: one line, never a paragraph; the harness message that repeats it is dropped |
 | E6 | a failure to keep | red block: title, detail, "Copy Error" when long | M: survives a reload (per chat); the same failure twice is one line |
 | E7 | a loop rescue | "Loop detected ×N of 3 — asking it to carry on" | M: sits where it happened; "marked ISSUES, next coder" at the limit |
-| E8 | a steer in a trace | "STEER: …" with file chips; pending state | M: keeps the moment it was sent, never dragged to the bottom |
+| E8 | a steer in a trace | "STEER: …" with file chips; pending state | M: keeps the moment it was sent, never dragged to the bottom; the STEER tag breathes until `run.steer delivered`; a file-only steer is the tag plus its chip |
 | E9 | a plain trace note | one text line | M: the same left inset as everything else |
 
 ### F. Traces

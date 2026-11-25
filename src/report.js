@@ -62,7 +62,7 @@ export function report({ task, role, insteadOf, startedBelow = false, skipped, o
       lines.push('The operator steered this run while it worked:');
       for (const s of steers.slice(-3)) {
         const said = String(s.text || '').replace(/\s+/g, ' ').trim();
-        lines.push(`- ${s.by ? `${s.by}: ` : ''}"${said}"`);
+        lines.push(`- ${s.by ? `${s.by}: ` : ''}${said ? `"${said}"` : 'a file, with no words'}`);
       }
       lines.push(
         'Judge the work against those instructions, and put the change in the task note and the plan so the ' +
