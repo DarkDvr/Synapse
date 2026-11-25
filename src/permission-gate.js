@@ -229,6 +229,25 @@ export function createPermissionGate({
     return best.id;
   }
 
+  /**
+   * The directory the shell call actually runs in.
+   *
+   * The engine's shell tool takes its own `workdir`; the permission event does not
+   * carry it. Judging `../docs/design.md` against the session root called a file
+   * inside the project an escape into `Synapse.Projects` and refused it (25 Nov).
+   * The call is in `recentTools`, so use the workdir it announced.
+   */
+  function workdirOf(request, info) {
+    const list = (recentTools.get(request.sessionId) || []).filter(
+      (tool) => Date.now() - tool.at <= TOOL_MEMORY_MS,
+    );
+    const tool = list.find((entry) => entry.id === request.toolCallId);
+    const raw = tool?.input?.workdir || tool?.input?.cwd || tool?.input?.directory;
+    if (!raw) return info.directory;
+    const resolved = resolvePath(raw, info.directory, { home });
+    return resolved && !resolved.unknown && resolved.path ? resolved.path : info.directory;
+  }
+
   async function sessionOf(sessionId, directory) {
     const cached = sessions.get(sessionId);
     if (cached) {
@@ -436,10 +455,11 @@ export function createPermissionGate({
       log.info(`permission left to the operator (${request.action || 'tool call'}) — the session directory is not known yet`);
       return null;
     }
+    const cwd = workdirOf(request, info);
     const verdict = decide({
       action: request.action,
       resources: request.resources,
-      cwd: info.directory,
+      cwd,
       projectRoot: info.directory,
       harnessRoot: root,
       home,
@@ -459,7 +479,7 @@ export function createPermissionGate({
       action: request.action,
       resources: request.resources,
       resolved: isPath
-        ? request.resources.map((r) => resolvePath(r, info.directory, { home })?.path || String(r))
+        ? request.resources.map((r) => resolvePath(r, cwd, { home })?.path || String(r))
         : [],
       outside: verdict.outside,
       scope: verdict.scope,
@@ -478,7 +498,7 @@ export function createPermissionGate({
         grantKey({
           action: request.action,
           resources: request.resources,
-          cwd: info.directory,
+          cwd,
           projectRoot: info.directory,
           harnessRoot: root,
           home,

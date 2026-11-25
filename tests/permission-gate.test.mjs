@@ -93,6 +93,37 @@ test('a request left to the operator is not marked as answering', async () => {
   assert.equal(gate.answering('req_1'), false, 'the card is the operator’s, not the gate’s');
 });
 
+// The shell tool can run in a subfolder. The ask carries no workdir, so the gate
+// used to resolve `../docs` against the project root and call a file inside the
+// project an escape into Synapse.Projects (25 Nov). Use the workdir the call
+// announced; without one, the project root is still the right answer.
+test('a shell ask is judged from the workdir the call announced', async () => {
+  const gate = createPermissionGate({
+    engine: {
+      async getSession(id) { return { id, directory: PROJECT, metadata: { synapse: { role: 'coder-1' } } }; },
+      async replyPermission() {},
+    },
+    logger: quiet,
+    root: ROOT,
+    home: HOME,
+    getProtection: () => [
+      { path: ROOT, label: 'Synapse', write: false, read: true },
+      { path: 'F:/dev/Synapse.Projects', label: 'Synapse projects', write: false, read: true },
+    ],
+    permissionTimeoutMs: 10,
+  });
+  gate.observe({
+    type: 'session.tool.called',
+    raw: { data: { sessionID: 'ses_1', id: 'call_1', name: 'shell', input: { command: 'git diff -- ../docs/design.md', workdir: `${PROJECT}/.project` } } },
+  });
+  const allowed = await gate.handle(event('shell', ['git diff -- ../docs/design.md']));
+  assert.equal(allowed.effect, 'allow', 'a subfolder workdir was judged as the project root');
+
+  const plain = setup();
+  const refused = await plain.gate.handle(event('shell', ['git diff -- ../docs/design.md']));
+  assert.equal(refused.effect, 'deny', 'the project fence was widened without a workdir');
+});
+
 // ── the screen ──────────────────────────────────────────────────
 // The one thing the harness does that is not about files: a window brought to the
 // front takes the operator's mouse, keyboard and focus. It asks, once, and the
