@@ -59,6 +59,7 @@ test('the page and the runner agree on the line, so one steer is one line', () =
   assert.match(runs, /const existing = trace\.notes\.find\(\(n\) => n\?\.steer && n\.text === line\)/, 'the runner pushes a duplicate');
   assert.match(runs, /if \(ev\.delivered\) delete existing\.pending/, 'the runner never confirms the painted line');
   assert.match(runs, /\.\.\.\(ev\.delivered \? \{\} : \{ pending: true \}\)/, 'a steer from another view starts pending');
+  assert.match(runs, /A steer the worker never reached/, 'a finished run stops the breath');
   assert.match(runs, /steerLine\(ev\.text\)/, 'the runner builds its own line instead of the shared one');
 });
 

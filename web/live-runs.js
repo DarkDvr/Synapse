@@ -587,6 +587,9 @@ export async function syncRuns() {
       trace.finishedAt = Date.now();
       trace.outcome = trace.outcome || 'finished';
     }
+    // A run that ends with a steer still pending will never read it: stop the
+    // breath rather than leave a promise running on a finished trace.
+    if (trace) for (const n of trace.notes || []) if (n?.steer && n.pending) delete n.pending;
   }
   for (const run of add) {
     const { key, ...rest } = run;
@@ -796,6 +799,9 @@ export function handleRunEvent(ev) {
       trace.ms = Number(ev.ms) || 0;
       trace.files = Number(ev.files) || 0;
       trace.outcome = ev.outcome || 'finished';
+      // A steer the worker never reached is no longer on its way. The breath is
+      // for "not read yet", not for "this run is over".
+      for (const n of trace.notes || []) if (n?.steer && n.pending) delete n.pending;
     }
     state.runs.delete(key);
     for (const [leaseKey, lease] of state.leases) {
