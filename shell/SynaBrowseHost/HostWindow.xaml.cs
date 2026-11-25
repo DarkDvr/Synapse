@@ -21,6 +21,8 @@ public partial class HostWindow : Window
     private CoreWebView2Environment? _environment;
     private int _port;
     private DateTime _lastProgress = DateTime.MinValue;
+    private string _lastExternal = string.Empty;
+    private DateTime _lastExternalAt = DateTime.MinValue;
 
     public HostWindow(HostOptions options)
     {
@@ -82,7 +84,24 @@ public partial class HostWindow : Window
             core.Settings.IsStatusBarEnabled = false;
             try { core.Profile.DefaultDownloadFolderPath = Path.GetFullPath(_options.DownloadDir); } catch { /* older runtime */ }
             core.DownloadStarting += OnDownloadStarting;
-            core.NewWindowRequested += (_, e) => { e.Handled = true; core.Navigate(e.Uri); };
+            core.NewWindowRequested += (_, e) =>
+            {
+                e.Handled = true;
+                if (TryExternal(e.Uri)) return;
+                core.Navigate(e.Uri);
+            };
+            // A custom protocol is not a page. Nexus's Slow Download redirects to
+            // nxm://, which ModOrganizer2 registers; WebView2 would otherwise swallow
+            // it or open a blank window. Hand only nxm to the OS, and only once per
+            // redirect: the same URI can arrive through more than one of these events.
+            core.NavigationStarting += (_, e) =>
+            {
+                if (TryExternal(e.Uri)) e.Cancel = true;
+            };
+            core.LaunchingExternalUriScheme += (_, e) =>
+            {
+                if (TryExternal(e.Uri)) e.Cancel = true;
+            };
             core.NavigationCompleted += (_, e) => Log(new { @event = "navigation", success = e.IsSuccess, status = e.HttpStatusCode, url = core.Source });
             core.ProcessFailed += (_, e) => Log(new { @event = "process-failed", reason = e.ProcessFailedKind.ToString() });
 
@@ -122,6 +141,40 @@ public partial class HostWindow : Window
         catch (Exception ex)
         {
             Log(new { @event = "warmup-error", message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Hand an nxm:// link to the program Windows has registered for it.
+    ///
+    /// This is the Nexus "Slow Download" route: the page redirects to nxm://, and
+    /// ModOrganizer2 catches it. WebView2 does not run custom protocols, and its
+    /// NewWindowRequested handler used to navigate the same window instead — a blank
+    /// page and no download. Only nxm is handed out; every other scheme stays inside
+    /// the browser, so a page cannot launch an arbitrary local program.
+    /// </summary>
+    private bool TryExternal(string uri)
+    {
+        if (!Uri.TryCreate(uri, UriKind.Absolute, out var parsed)) return false;
+        if (!string.Equals(parsed.Scheme, "nxm", StringComparison.OrdinalIgnoreCase)) return false;
+        var now = DateTime.UtcNow;
+        if (string.Equals(uri, _lastExternal, StringComparison.OrdinalIgnoreCase)
+            && (now - _lastExternalAt).TotalSeconds < 2)
+        {
+            return true; // already launched; the other WebView2 event is the duplicate
+        }
+        _lastExternal = uri;
+        _lastExternalAt = now;
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = uri, UseShellExecute = true });
+            Log(new { @event = "external", scheme = "nxm", uri });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log(new { @event = "external-error", scheme = "nxm", uri, error = ex.Message });
+            return false;
         }
     }
 

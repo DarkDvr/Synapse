@@ -118,6 +118,11 @@ by a previous shell and the server refuses a restart while work is live, but nei
 a forced kill safe. Finished work ends at the commit/tag/push; if a running binary is
 needed, say which change needs it and let the operator restart.
 
+**Never rebuild `Synapse.exe` for web-only work.** `web/` is served from disk, so a page
+change is live after a window reload. A fresh unsigned exe trips Windows SmartScreen and
+can be blocked outright; the shell is built only when the operator asks, with the window
+closed. The shell binary in this folder is the known-good one.
+
 ### Destructive commands — verify before you act
 
 This machine is shared: the desktop app, a browser with hundreds of processes, games,
