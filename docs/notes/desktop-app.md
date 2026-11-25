@@ -87,6 +87,13 @@ it is running survives the window coming back. Only when there is no live server
 fall back to the old cleanup, server first because its tree holds the engine. A stale pid
 or a half-started server is not adopted.
 
+**A build can land while the app runs.** Windows locks the image file against a
+replacement but allows a rename, so `shell\build.ps1` moves the running `Synapse.exe`
+to `Synapse.exe.old-<stamp>` and puts the new one at the root; the running window keeps
+the old image, and the next launch runs the new build. The browser host is published
+into `dist-host` and swapped the same way. The script never stops a process — the
+operator's next restart is the only thing that changes what is running.
+
 **The console is in the window.** `logger` mirrors the `app` channel and every warning
 or error to stdout; the shell captures that into `logs\console.log` and a ring buffer
 and serves it to the page over the WebView2 channel. The page never reads a file and
