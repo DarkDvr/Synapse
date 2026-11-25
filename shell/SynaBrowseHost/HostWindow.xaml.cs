@@ -24,6 +24,37 @@ public partial class HostWindow : Window
     private string _lastExternal = string.Empty;
     private DateTime _lastExternalAt = DateTime.MinValue;
 
+    /// <summary>
+    /// Catches the two shapes Nexus uses for a manager download: an anchor whose href
+    /// is nxm:// and a script calling window.open. The host's navigation events are the
+    /// third shape; this one runs in the page, before the site's own handlers.
+    /// </summary>
+    private const string NxmClickScript = @"
+(function () {
+  if (window.__synapseNxm) return;
+  window.__synapseNxm = true;
+  function send(uri) {
+    if (!uri || String(uri).toLowerCase().indexOf('nxm:') !== 0) return false;
+    try { window.chrome.webview.postMessage({ synapse: 'nxm', uri: String(uri) }); return true; }
+    catch (e) { return false; }
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a) return;
+    var href = a.getAttribute('href') || '';
+    if (href.toLowerCase().indexOf('nxm:') === 0 && send(href)) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+  }, true);
+  var open = window.open;
+  window.open = function (uri) {
+    if (typeof uri === 'string' && uri.toLowerCase().indexOf('nxm:') === 0 && send(uri)) return null;
+    return open.apply(window, arguments);
+  };
+})();
+";
+
     public HostWindow(HostOptions options)
     {
         InitializeComponent();
@@ -84,6 +115,21 @@ public partial class HostWindow : Window
             core.Settings.IsStatusBarEnabled = false;
             try { core.Profile.DefaultDownloadFolderPath = Path.GetFullPath(_options.DownloadDir); } catch { /* older runtime */ }
             core.DownloadStarting += OnDownloadStarting;
+            core.WebMessageReceived += OnWebMessageReceived;
+            // The fourth and lowest door: a navigation or subresource to nxm may
+            // never become a NavigationStarting event, but WebView2 will ask for the
+            // resource. Answering it with an empty response keeps the page from
+            // showing an error after the hand-off.
+            try
+            {
+                core.AddWebResourceRequestedFilter("nxm:*", CoreWebView2WebResourceContext.All);
+                core.WebResourceRequested += OnWebResourceRequested;
+            }
+            catch { /* an older runtime without custom-scheme filters */ }
+            // WebView2 does not always raise a navigation event for a custom scheme:
+            // a page can click an anchor or call window.open and the host sees nothing.
+            // The injected listener is the reliable door for Nexus's Slow Download.
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(NxmClickScript);
             core.NewWindowRequested += (_, e) =>
             {
                 e.Handled = true;
@@ -142,6 +188,30 @@ public partial class HostWindow : Window
         {
             Log(new { @event = "warmup-error", message = ex.Message });
         }
+    }
+
+    private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
+    {
+        if (!TryExternal(e.Request.Uri)) return;
+        try
+        {
+            e.Response = _environment?.CreateWebResourceResponse(
+                new MemoryStream(Array.Empty<byte>()), 204, "No Content", "");
+        }
+        catch { /* the page is leaving anyway */ }
+    }
+
+    private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(e.WebMessageAsJson);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return;
+            if (!root.TryGetProperty("synapse", out var kind) || kind.GetString() != "nxm") return;
+            if (root.TryGetProperty("uri", out var uri)) TryExternal(uri.GetString() ?? "");
+        }
+        catch { /* a message from a page is untrusted; a malformed one is ignored */ }
     }
 
     /// <summary>
