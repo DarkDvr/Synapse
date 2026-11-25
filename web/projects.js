@@ -246,19 +246,30 @@ export function renderEmpty() {
 }
 
 /** A project's one conversation. With no chat yet, the first open makes one. */
+// A double-click asks for the same chat twice before the first request has come
+// back. Creating is the expensive half — two calls could make two sessions for one
+// project — so the second click joins the open that is already happening.
+const openingChats = new Set();
+
 export async function openProjectChat(id) {
-  const p = state.projects.find((x) => x.id === id);
-  if (!p) return;
-  if (p.exists === false) {
-    toast('Folder Missing', `${p.directory} does not exist, so no conversation can run there.`);
-    return;
+  if (openingChats.has(id)) return;
+  openingChats.add(id);
+  try {
+    const p = state.projects.find((x) => x.id === id);
+    if (!p) return;
+    if (p.exists === false) {
+      toast('Folder Missing', `${p.directory} does not exist, so no conversation can run there.`);
+      return;
+    }
+    const chat = newestSession(p);
+    if (chat) {
+      await wired.openSession(chat.id);
+      return;
+    }
+    await wired.createChat(p.id);
+  } finally {
+    openingChats.delete(id);
   }
-  const chat = newestSession(p);
-  if (chat) {
-    await wired.openSession(chat.id);
-    return;
-  }
-  await wired.createChat(p.id);
 }
 
 /**

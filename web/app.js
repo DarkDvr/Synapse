@@ -139,6 +139,7 @@ import {
   reuseMessage,
   addAttachmentFiles,
   onComposerPaste,
+  installChatDrop,
   renderAttachments,
   showAttachPreview,
   hideAttachPreview,
@@ -2021,6 +2022,10 @@ function wire() {
   // Paste is a second door to the same place: files and images from the clipboard,
   // and long text as a .txt attachment rather than a wall in the box.
   $('promptInput').addEventListener('paste', onComposerPaste);
+  // The third door: a file dragged from Explorer anywhere onto the conversation.
+  // It lands in the same attachment strip, under the same size rules, and only
+  // while the composer can take it.
+  installChatDrop();
   $('attachStrip').addEventListener('click', (e) => {
     const x = e.target.closest('[data-detach]');
     if (!x) return;
@@ -2453,6 +2458,18 @@ document.addEventListener('keydown', (e) => {
     if (stop) { interruptSession(stop.dataset.interrupt); return; }
     const project = e.target.closest('[data-project]');
     if (project) { openProjectChat(project.dataset.project); return; }
+  });
+
+  // The row opens its chat on one click; two clicks also open the folder, the
+  // same act as Browse. There is no delay on the single click: a project row is
+  // the most-used control in the rail, and a 250ms debounce to tell the two apart
+  // would be felt on every ordinary click.
+  $('projectTree').addEventListener('dblclick', (e) => {
+    if (e.target.closest('[data-menu-project]')) return;
+    const row = e.target.closest('[data-project-row]');
+    if (!row) return;
+    e.preventDefault();
+    openProjectFolder(row.dataset.projectRow, 'browse');
   });
 
   // A selection pauses the conversation: `renderTranscript` holds the render back while

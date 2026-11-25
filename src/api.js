@@ -39,6 +39,7 @@ import { addPrivateDir, addSession, isPrivateDir, isPrivateSession, removePrivat
 import { purgeEngineLog, purgePrivateTraces, requestConsolePurge } from './privacy-purge.js';
 import { noteDeletedProject } from './engine-purge.js';
 import { APP_VERSION, sourceVersion } from './version.js';
+import { openInExplorer, resolveProjectPath } from './open-path.js';
 
 // What an attachment may be. The old rule was six files of up to 8 MB each, which
 // made twelve small screenshots impossible for no reason: the real cost is the
@@ -1821,6 +1822,40 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       child.unref();
       app.info(`opened ${cmd ? 'a command prompt' : 'Explorer'} at ${project.directory}`);
       return { ok: true };
+    },
+
+
+    /**
+     * Open a file a card named, or reveal it in Explorer.
+     *
+     * The path comes from the chat, which means it comes from a model. It is
+     * resolved against the project folder and refused if it lands anywhere else;
+     * the same fence the permission policy puts around a tool call applies to what
+     * the operator's click can launch.
+     */
+    openProjectPath: async (id, body) => {
+      const project = projects.find(id);
+      if (!project) throw fail(404, 'project not found');
+      if (!fs.existsSync(project.directory)) {
+        throw fail(400, `the folder does not exist: ${project.directory}`);
+      }
+      const resolved = resolveProjectPath(project.directory, body?.path);
+      if (resolved.error === 'empty') throw fail(400, 'no file was named');
+      if (resolved.error === 'outside') throw fail(403, 'that file is outside this project');
+
+      const select = Boolean(body?.select);
+      if (resolved.error === 'missing') {
+        // A file that is gone is not a reason to say nothing: "Open Folder" still
+        // has the folder it used to be in, and opening that is the useful half.
+        if (!select || !resolved.parent) throw fail(404, 'that file is no longer there');
+        openInExplorer({ path: resolved.parent, isDir: true });
+        app.info(`opened ${resolved.parent} (the file itself is gone)`);
+        return { ok: true, missing: true, path: resolved.path };
+      }
+
+      openInExplorer(resolved, { select });
+      app.info(`opened ${select ? 'the folder of ' : ''}${resolved.path}`);
+      return { ok: true, missing: false, path: resolved.path };
     },
 
 

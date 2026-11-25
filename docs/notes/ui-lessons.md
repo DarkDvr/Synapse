@@ -305,6 +305,24 @@ clock and picker joined into one row.
   rest it reads `CTRL+Enter to send`. `field-sizing: content` sizes the box (see Traps). Stop
   is enabled by `state.busy`, `currentRun()`, `state.canStop`, `state.compacting` or a lease
   wait — it is the way out of everything.
+- **A file card is a door.** Right-clicking a tool card that named a `filePath`/`path` offers
+  exactly **Open File** and **Open Folder**; a picture chip with a project-relative path does
+  too. The server resolves the path against the project and refuses anything outside it —
+  the model's string reaches `explorer.exe`, so the project fence is the permission. Open
+  Folder passes `/select,<path>` as one argument, because Explorer treats a separated
+  `/select,` as "open the folder" and selects nothing.
+- **The whole chat takes a dropped file.** Drag from Explorer onto the transcript or the
+  composer and it lands in the same attachment strip as the paperclip and Ctrl+V, under the
+  same 8MB/48MB/24-file rules. The dock is the target, not the one-line box: aiming at a text
+  field first is precision the rest of the page never asks for. The target only lights while
+  the composer can take the file; a question, a permission or a compaction closes both doors
+  together. A file dropped outside the dock is swallowed too, so the WebView2 never navigates
+  to it and replaces the app.
+- **Selected chat text can go back into the chat.** The right-click menu adds **Copy Into
+  Chat** when the composer is available, and puts the selection at the caret (or appends it);
+  when a question panel is up it checks **Something Else** on the current page and appends
+  the text there. The menu item is absent, not disabled, when there is nowhere for the text
+  to land.
 - **Markdown is hand-rolled and escape-first** (`web/md.js`): the source is HTML-escaped
   before any rule runs, and link targets are limited to `http(s)`, `mailto`, `/` and `#`,
   images additionally `data:image/`. Fenced code, headings, GFM tables with alignment,
@@ -601,10 +619,12 @@ run — so they get `Allow Screen` / `Allow Sign-In` and **no Always Allow**.
 ## The rail, the plan and Settings
 
 - **The rail is a list of projects, one row each.** Clicking a row opens the project's
-  one conversation. The menu — the `⋯` or Shift+F10 — offers Browse, Cmd, Rename, Delete
-  and **Move Up / Move Down**, the ends disabled rather than a click that does nothing.
-  **No right-click anywhere:** it opened the menu on a row and did nothing useful
-  elsewhere, so the page refuses the event and the host's default menu is off with it.
+  one conversation; double-clicking it opens the folder, the same as Browse. The menu — the
+  `⋯` or Shift+F10 — offers Browse, Cmd, Rename, Delete and **Move Up / Move Down**, the ends
+  disabled rather than a click that does nothing. A right-click is the page's text menu
+  instead (Copy, Select All, Copy Into Chat), never this project menu. The two clicks of a
+  double-click can arrive before the first open has returned, so `openProjectChat` remembers
+  the project it is already opening; otherwise a project with no chat would make two.
 - **The order is the registry file**, written in the order shown, a new project appended.
   Nothing is sorted by name: a rename must not move a row the operator is looking for. The
   model menu follows the provider order set in Settings for the same reason.

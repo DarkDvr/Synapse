@@ -158,13 +158,17 @@ export function createHarnessGuard({ root, logger, notify }) {
         if (SHELL_TOOLS.test(name) && harnessPathsIn(input.command).length) {
           const shown = String(input.command).replace(/\s+/g, ' ').slice(0, 160);
           // Using the toolbox is ordinary tool use: the renderer, the craft briefs. It is
-          // already in the transcript, the census and the session log, so it is not even
-          // written down here. A command whose only harness paths are under skills/ is
-          // toolbox work even when it names a script through a variable or copies its
-          // output into the project — the old RUNS_HARNESS_CODE check missed those and
-          // rang a false alarm (24 Nov). The permission ruleset still refuses a write to
-          // skills/, and the snapshot catches anything that gets past it.
-          if (runsTheToolbox(input.command)) continue;
+          // not an alarm, but it is still a read of the harness, so it keeps its line in
+          // the log — the same place every other read is written down (25 Nov). A command
+          // whose only harness paths are under skills/ is toolbox work even when it names
+          // a script through a variable or copies its output into the project — the old
+          // RUNS_HARNESS_CODE check missed those and rang a false alarm (24 Nov). The
+          // permission ruleset still refuses a write to skills/, and the snapshot catches
+          // anything that gets past it.
+          if (runsTheToolbox(input.command)) {
+            reads.add(shown);
+            continue;
+          }
           if (couldWriteHarness(input.command)) shells.add(shown);
           else reads.add(shown);
         }

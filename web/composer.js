@@ -130,6 +130,9 @@ export function renderComposer() {
     const el = $(id);
     if (el) el.disabled = blocked;
   }
+  // A drop target is only honest while the box can take a file. A question or a
+  // permission card closes the composer, so it also closes the chat's drop target.
+  if (!composerAcceptsFiles()) hideDropHint();
   renderStopState();
   wired.renderCompactChip();
 }
@@ -554,6 +557,101 @@ function clipboardFiles(dt) {
     if (file) files.push(file);
   }
   return files;
+}
+
+/** Can this chat take a dropped file right now? The composer is the same door. */
+export function composerAcceptsFiles() {
+  const input = $('promptInput');
+  return Boolean(state.sessionId) && Boolean(input) && !input.disabled && !state.compacting;
+}
+
+/** Show or hide the chat's drop target. */
+function showDropHint(on) {
+  const dock = $('chatDock');
+  const hint = $('chatDrop');
+  if (dock) dock.classList.toggle('is-drop-target', on);
+  if (hint) hint.hidden = !on;
+}
+
+function hideDropHint() {
+  showDropHint(false);
+}
+
+/** Does this drag carry files from the operating system? */
+function dragHasFiles(e) {
+  return [...(e.dataTransfer?.types || [])].includes('Files');
+}
+
+/**
+ * The whole chat is a drop target for files.
+ *
+ * A file dragged from Explorer is the same thing as a file picked with the paperclip
+ * or pasted into the box: it is read into memory and travels with the next message.
+ * The target is the dock, not the textarea, because the operator is looking at the
+ * conversation when they drag — requiring them to hit a one-line box first is the
+ * kind of aim the rest of the page does not ask for.
+ *
+ * It is only live while the composer is: a question or a permission card blocks the
+ * same door a paste would go through, and a drop target that accepts a file the
+ * chat cannot send would be a lie.
+ */
+export function installChatDrop() {
+  const dock = $('chatDock');
+  if (!dock) return;
+
+  dock.addEventListener('dragenter', (e) => {
+    if (!dragHasFiles(e)) return;
+    e.preventDefault();
+    if (composerAcceptsFiles()) showDropHint(true);
+  });
+
+  dock.addEventListener('dragover', (e) => {
+    if (!dragHasFiles(e)) return;
+    // Without this the WebView2 navigates to the dropped file and the app is gone.
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = composerAcceptsFiles() ? 'copy' : 'none';
+  });
+
+  dock.addEventListener('dragleave', (e) => {
+    if (!dragHasFiles(e)) return;
+    // Crossing from the transcript to the composer is not leaving the chat.
+    if (e.relatedTarget && dock.contains(e.relatedTarget)) return;
+    hideDropHint();
+  });
+
+  dock.addEventListener('drop', async (e) => {
+    if (!dragHasFiles(e)) return;
+    e.preventDefault();
+    hideDropHint();
+    if (!composerAcceptsFiles()) {
+      toast(
+        'Chat Is Not Taking Files',
+        state.sessionId
+          ? 'Answer the question or permission on screen first.'
+          : 'Open a project chat first.',
+      );
+      return;
+    }
+    const files = [...(e.dataTransfer?.files || [])];
+    if (!files.length) return;
+    const added = await addAttachmentFiles(files);
+    if (!added) return;
+    $('promptInput')?.focus();
+    toast('Files Attached', `${added} file${added === 1 ? '' : 's'} ready to send.`);
+  });
+
+  // Leaving the window without dropping, and a cancelled drag, both put the target
+  // away; otherwise it would stay lit over a chat that is no longer being dragged to.
+  window.addEventListener('dragend', hideDropHint);
+  window.addEventListener('blur', hideDropHint);
+  // A drop outside the chat is still a file the WebView would navigate to. The
+  // page swallows it rather than replacing the app with a picture.
+  document.addEventListener('dragover', (e) => {
+    if (dragHasFiles(e)) e.preventDefault();
+  });
+  document.addEventListener('drop', (e) => {
+    if (dragHasFiles(e) && !e.target.closest?.('#chatDock')) e.preventDefault();
+  });
 }
 
 /**

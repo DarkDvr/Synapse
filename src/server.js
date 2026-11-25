@@ -574,6 +574,12 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
         const body = await readBody(req);
         return sendJson(res, 200, await api.openProject(projectId, body?.what === 'cmd' ? 'cmd' : 'browse'));
       }
+      // A path named in the chat: open it, or reveal it in its folder. The host
+      // owns Explorer, so a remote view may not make this PC open a window.
+      if (seg[2] === 'open-path' && method === 'POST') {
+        if (fromLan) return sendJson(res, 403, { error: 'opening a file is done on the host only' });
+        return sendJson(res, 200, await api.openProjectPath(projectId, await readBody(req)));
+      }
     }
 
     // /api/sessions... — the engine's word for a chat. The only creation route

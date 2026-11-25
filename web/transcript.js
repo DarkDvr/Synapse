@@ -11,7 +11,7 @@
 // and the compact post's metadata. Wired at boot; a missing one throws.
 import { state } from './state.js';
 import { $ } from './dom.js';
-import { esc, hhmm, toolTarget, toolNameLabel, fileChip, shortName, reasoningGist } from './format.js';
+import { esc, hhmm, toolTarget, toolFile, toolNameLabel, fileChip, shortName, reasoningGist } from './format.js';
 
 /** 172000 → "172K": one number, in the chat's own units. */
 const compactK = (n) => (!n ? '0' : n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : String(n));
@@ -858,6 +858,10 @@ export function renderTool(part) {  const status = String(part.status || 'unknow
   const id = part._k || `tool-${toolSeq++}`;
   const open = state.open.has(id);
   const target = String(part.name) === 'question' ? questionSummary(part) : toolTarget(part);
+  // The file this call names, if it names one: the card's right-click menu opens
+  // it, or reveals it in Explorer. A path in the input is the only thing trusted
+  // here; the one-line target may be a command or a pattern.
+  const file = toolFile(part);
   const input = part.input !== null && part.input !== undefined ? JSON.stringify(part.input, null, 1) : '';
   const output = part.output !== null && part.output !== undefined
     ? (typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 1))
@@ -875,7 +879,7 @@ export function renderTool(part) {  const status = String(part.status || 'unknow
   const decision = part.id ? state.permissionDecisions?.get(part.id) : null;
   const permChip = decision?.outside ? permissionChip(decision) : '';
 
-  return `<div class="tool-card${open ? ' open' : ''}" data-tool-card="${esc(id)}">
+  return `<div class="tool-card${open ? ' open' : ''}" data-tool-card="${esc(id)}"${file ? ` data-file="${esc(file)}"` : ''}>
     <div class="tool-head" role="button" tabindex="0" data-tool-toggle="${esc(id)}" aria-expanded="${open}" aria-controls="${esc(id)}-detail">
       <span class="status-dot ${cls}" role="img" aria-label="${esc(label)}"></span>
       <span class="tool-name">${esc(toolLabel(part))}</span>

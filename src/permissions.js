@@ -740,6 +740,8 @@ export function programSubsystem(file) {
       fs.closeSync(fd);
     }
   } catch {
+    // An unreadable program is not one we can call harmless: null asks for the
+    // screen, the same as an unknown subsystem.
     return null;
   }
 }

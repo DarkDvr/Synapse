@@ -89,6 +89,32 @@ export function parseToolInput(input) {
   }
 }
 
+/**
+ * The file a tool call names, if it names one.
+ *
+ * A card's right-click menu can open that file or its folder, so the path has to
+ * come from the call rather than from the one-line target: a target can be a
+ * command, a search pattern or a URL. Only the argument names the engine uses for
+ * a file are read; anything else stays a target and gets no file menu.
+ */
+export function toolFile(part) {
+  const input = parseToolInput(part?.input) || parseToolInput(part?.title);
+  if (!input || typeof input !== 'object') return '';
+  for (const key of ['filePath', 'file_path', 'path', 'notebook_path', 'filename', 'file']) {
+    const value = input[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  // A call that carries a list of files: the first is the one the operator sees
+  // named in the target, so it is the one a menu should open.
+  if (Array.isArray(input.files)) {
+    for (const file of input.files) {
+      const value = typeof file === 'string' ? file : file?.path || file?.uri;
+      if (typeof value === 'string' && value.trim() && !value.startsWith('data:')) return value.trim();
+    }
+  }
+  return '';
+}
+
 /** A tool's name as the operator reads it, without the MCP server prefix. */
 export function toolNameLabel(name) {
   const raw = String(name || 'tool');

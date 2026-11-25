@@ -310,6 +310,14 @@
                  the question stays readable above it. Its answers live in the DOM, so it
                  is moved and never rebuilt. -->
             <div class="ask-host" id="askHost" hidden></div>
+
+            <!-- Dropping a file anywhere on the conversation attaches it, exactly as
+                 pasting one into the box does. The target is drawn over the whole dock,
+                 so the operator can aim at the chat rather than at one text field. -->
+            <div class="chat-drop" id="chatDrop" hidden aria-hidden="true">
+              <span class="chat-drop-mark" aria-hidden="true">+</span>
+              <span>Drop Files To Attach</span>
+            </div>
           </section>
         </section>
       </div>
