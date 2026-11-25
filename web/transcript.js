@@ -12,9 +12,6 @@
 import { state } from './state.js';
 import { $ } from './dom.js';
 import { esc, hhmm, toolTarget, toolFile, toolNameLabel, fileChip, shortName, reasoningGist } from './format.js';
-
-/** 172000 → "172K": one number, in the chat's own units. */
-const compactK = (n) => (!n ? '0' : n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : String(n));
 import { renderMarkdown } from './md.js';
 import { waitPostHtml } from './wait-post.js';
 import { serverNow } from './api.js';
@@ -24,6 +21,7 @@ import { chatAtBottom, chatFollows, scrollChatToBottom, renderChatNav, captureCh
 import { currentProject, roleLabel, groupTurns, currentForm } from './run-view.js';
 import { renderTrace, tracesFor, traceSig, renderSessionStream } from './traces.js';
 import { downloadCard, downloadsForProject, downloadsInWindow } from './downloads.js';
+import { compactRow } from './compact-row.js';
 
 const missing = (name) => () => {
   throw new Error(`transcript.js: ${name} was not wired at boot`);
@@ -38,6 +36,33 @@ const wired = {
 /** Hand this module the five things that live in app.js. Called once, at boot. */
 export function transcriptWiring(fns) {
   Object.assign(wired, fns);
+}
+
+/** One compaction, in the same tool-shaped row a worker's trace uses. */
+function compactionLine(m, line = '') {
+  const running = String(m.raw?.status || '') === 'running';
+  const list = state.messages || [];
+  // The count is this compaction's place in the chat. The transcript normally holds
+  // the message being rendered; a direct call (a test, a preview) does not, and then
+  // the message is one past what the list knows.
+  const counted = list.filter((x) => x.type === 'compaction' && Number(x.created) <= Number(m.created)).length;
+  const inList = list.some((x) => x && m.id && x.id === m.id);
+  const index = Math.max(1, inList ? counted : counted + 1);
+  // The size is the compaction's own prompt — what it summarised. The step before it can
+  // carry a provider's cumulative cache figure (270K on a 262K window, measured 13 Nov),
+  // and a number larger than the window it filled is not a number worth printing.
+  const before = [...list]
+    .reverse()
+    .find((x) => x.type === 'assistant' && x.raw?.tokens && Number(x.created) < Number(m.created));
+  const tokens = before?.raw?.tokens || {};
+  const summed = (Number(tokens.input) || 0) + (Number(tokens.cache?.read) || 0);
+  const limit = wired.architectLimit?.() || 0;
+  // Print the size only when it can be true. A prompt larger than the window it filled is
+  // a provider's cumulative cache figure, and the compaction's own usage is sometimes the
+  // summary request instead of the history (measured 13 Nov: 882 tokens on a full window).
+  // No number is better than a wrong one, so the line then says only that it happened.
+  const size = summed && (!limit || summed <= limit) ? summed : 0;
+  return compactRow({ running, count: index, size, limit, line });
 }
 
 // ── transcript ──────────────────────────────────────────────────
@@ -394,6 +419,24 @@ export function renderTranscript() {
   // watched at every step (14 Nov).
   const liveTail = renderSessionStream();
   const paneAt = panePostIndex(showable);
+  // A compaction message arrives while the pane is still open, and it is created
+  // after the assistant step it belongs to — so drawing it in message order put it
+  // *under* the thinking pane until the next step pushed it up. It belongs above the
+  // pane. Move the compaction messages that immediately follow the pane's post into
+  // that post's tail, before the pane; they keep that place when the turn ends, so
+  // the line does not jump down when the pane goes away.
+  const movedCompactions = new Set();
+  let paneTail = liveTail;
+  if (paneAt >= 0) {
+    const lines = [];
+    for (let j = paneAt + 1; j < showable.length; j += 1) {
+      const next = showable[j];
+      if (next?.type !== 'compaction') break;
+      movedCompactions.add(next);
+      lines.push(compactionLine(next, next.id ? ` data-line="msg:${esc(next.id)}"` : ''));
+    }
+    if (lines.length) paneTail = lines.join('') + liveTail;
+  }
   // A download belongs to the post it happened in: inside that post's green rule, and
   // scrolling with it (18 Nov). Live cards carry MAX_SAFE_INTEGER, so they land in the
   // newest post; anything that fits no post (a chat with no assistant message yet) is
@@ -412,7 +455,7 @@ export function renderTranscript() {
         extras = mine.map(downloadCard).join('');
       }
     }
-    html += renderMessage(m, i === paneAt ? liveTail : '', extras);
+    if (!movedCompactions.has(m)) html += renderMessage(m, i === paneAt ? paneTail : '', extras);
   }
   while (next < items.length) html += items[next++].html;
   if (liveTail && paneAt === -1) html += liveTail;
@@ -568,38 +611,8 @@ export function renderMessage(m, tail = '', extras = '') {
     </div></div>`;
   }
   if (m.type === 'compaction') {
-    // The same line a run's trace draws ("⏳ Compacting ×1 · context at 172K/262K"), because
-    // a compaction is one thing whether a worker or the operator's own turn is doing it.
-    // The count is this compaction's place in the chat, and the size is the last prompt
-    // before it — what was summarised (13 Nov).
-    const running = String(m.raw?.status || '') === 'running';
-    const list = state.messages || [];
-    // The count is this compaction's place in the chat. The transcript normally holds the
-    // message being rendered; a direct call (a test, a preview) does not, and then the
-    // message is one past what the list knows.
-    const counted = list.filter((x) => x.type === 'compaction' && Number(x.created) <= Number(m.created)).length;
-    const inList = list.some((x) => x && m.id && x.id === m.id);
-    const index = Math.max(1, inList ? counted : counted + 1);
-    // The size is the compaction's own prompt — what it summarised. The step before it can
-    // carry a provider's cumulative cache figure (270K on a 262K window, measured 13 Nov),
-    // and a number larger than the window it filled is not a number worth printing.
-    const before = [...list]
-      .reverse()
-      .find((x) => x.type === 'assistant' && x.raw?.tokens && Number(x.created) < Number(m.created));
-    const tokens = before?.raw?.tokens || {};
-    const summed = (Number(tokens.input) || 0) + (Number(tokens.cache?.read) || 0);
-    const limit = wired.architectLimit?.() || 0;
-    // Print the size only when it can be true. A prompt larger than the window it filled is
-    // a provider's cumulative cache figure, and the compaction's own usage is sometimes the
-    // summary request instead of the history (measured 13 Nov: 882 tokens on a full window).
-    // No number is better than a wrong one, so the line then says only that it happened.
-    const size = summed && (!limit || summed <= limit) ? summed : 0;
-    const where = size ? ` · context at ${compactK(size)}${limit ? `/${compactK(limit)}` : ''}` : '';
-    // `says`, not `line`: the attribute this post travels under is `line` (above).
-    const says = running ? `Compacting ×${index}` : `Compacted ×${index}`;
-    return `<div class="trace"${line} data-msg="synapse"><div class="trace-lines">
-      <div class="trace-line is-compact"><span class="trace-mark">⏳</span>${esc(says)}${esc(where)}</div>
-    </div></div>`;
+    return `<div class="trace is-compact-post"${line} data-msg="synapse"><div class="trace-lines">` +
+      `${compactionLine(m)}</div></div>`;
   }
   if (m.type === 'assistant') {
     const body = [`${stamp}<span class="msg-role">Architect</span>`];

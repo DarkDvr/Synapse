@@ -1528,9 +1528,33 @@ body[data-mode="single"] #runAuto { display: none; }
 .trace-line.is-steer .chat-image { flex: none; }
 /* A compaction is a Synapse event, so it wears the harness yellow; a loop rescue is
    a problem the harness had to fix, so it keeps the amber of trouble. */
-.trace-line.is-compact, .trace-line.is-loop { font-weight: 600; position: relative; padding-left: 16px; margin: 5px 0; }
-.trace-line.is-compact { color: var(--yellow); }
-.trace-line.is-loop { color: var(--amber); }
+.trace-line.is-compact, .trace-line.is-loop { position: relative; padding-left: 16px; margin: 5px 0; }
+.trace-line.is-loop { font-weight: 600; color: var(--amber); }
+/* The compaction row mirrors a tool head — dot, name, target — because it is a
+   moment in the work, not a banner. It is deliberately smaller than body text and
+   carries no margins of its own; the pane above it is the thing being explained. */
+.trace-line.is-compact {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0; margin: 2px 0;
+  font-family: var(--mono); font-size: calc(var(--chat-fs) * 0.8);
+  line-height: 1.3; font-weight: 500; color: var(--yellow);
+}
+.compact-dot {
+  flex: none; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--yellow); opacity: 0.55;
+}
+.compact-dot.is-live { opacity: 1; animation: dot-breathe 1.4s ease-in-out infinite; }
+.compact-name { flex: none; font-weight: 600; color: var(--yellow); }
+.compact-target {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: rgba(237, 194, 90, 0.62);
+}
+/* A compaction message is one row; the generic trace spacing is far too tall for it. */
+.trace.is-compact-post { margin: 0 0 5px; }
+.trace.is-compact-post .trace-lines { margin-top: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .compact-dot.is-live { animation: none; }
+}
 /* The turn has started and the model has said nothing yet: one quiet line that
    breathes, so the chat cannot be mistaken for a dead one (11 Nov). */
 .trace-line.is-waiting {

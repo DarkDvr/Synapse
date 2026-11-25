@@ -18,7 +18,8 @@ import { renderMarkdown } from './md.js';
 import { paneMarkup } from './thinking-pane.js';
 import { leaseClock, leaseFor, leaseCard, leaseChip } from './chat-notes.js';
 import { turnLive } from './turn-live.js';
-import { fmtTokens, dirKey, roleLabel } from './run-view.js';
+import { dirKey, roleLabel } from './run-view.js';
+import { compactRow } from './compact-row.js';
 
 const missing = (name) => () => {
   throw new Error(`traces.js: ${name} was not wired at boot`);
@@ -77,12 +78,13 @@ export function steerLine(text) {
 }
 
 function compactMark(mark, key = '') {
-  const count = Math.max(1, Number(mark.count) || 1);
-  const size = Number(mark.size) || 0;
-  const limit = Number(mark.limit) || 0;
-  const where = size ? ` · context at ${fmtTokens(size)}${limit ? `/${fmtTokens(limit)}` : ''}` : '';
-  const line = mark.running ? `Compacting ×${count}` : `Compacted ×${count}`;
-  return `<div class="trace-line is-compact"${key ? ` data-line="${esc(key)}"` : ''}><span class="trace-mark">⏳</span>${esc(line)}${esc(where)}</div>`;
+  return compactRow({
+    running: Boolean(mark.running),
+    count: Number(mark.count) || 1,
+    size: Number(mark.size) || 0,
+    limit: Number(mark.limit) || 0,
+    line: key ? ` data-line="${esc(key)}"` : '',
+  });
 }
 
 function loopMark(mark, key = '') {
@@ -279,17 +281,17 @@ export function renderTrace(t) {
   // (8 Nov).
   const compactSize = compacting ? Number(t.compactFrom) || 0 : Number(t.compactAt) || 0;
   const compactLimit = Number(t.compactLimit) || 0;
-  const compactWhere = compactSize
-    ? ` · context at ${fmtTokens(compactSize)}${compactLimit ? `/${fmtTokens(compactLimit)}` : ''}`
-    : '';
   // While one is in flight the count is "the ones that have finished, plus this
   // one" — `compactions` only ever counts finished compactions, so the number here
   // is the number of the one being written.
-  const compactLine = compacting
-    ? `<div class="trace-line is-compact"><span class="trace-mark">⏳</span>Compacting ×${packed + 1}${compactWhere}</div>`
-    : packed
-      ? `<div class="trace-line is-compact"><span class="trace-mark">⏳</span>Compacted ×${packed}${compactWhere}</div>`
-      : '';
+  const compactLine = compacting || packed
+    ? compactRow({
+        running: Boolean(compacting),
+        count: compacting ? packed + 1 : packed,
+        size: compactSize,
+        limit: compactLimit,
+      })
+    : '';
   const hasMarks = (t.marks || []).some((m) => m && m.kind === 'compact');
   // A loop rescue is a moment too: it explains the shorter thinking that follows it,
   // not the thinking an hour later. It used to be pinned under the live step for the

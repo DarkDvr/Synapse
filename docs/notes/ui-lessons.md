@@ -257,6 +257,13 @@ clock and picker joined into one row.
   its next step); a refusal takes the line off with a toast; confirmation **adopts** that
   line instead of pushing a second one. `steerLine()` in `traces.js` builds the text for
   both sides, because two builders drift by half a character and read as duplicates.
+- **A compaction is a moment, not a banner.** It wears the tool head's shape — a
+  small yellow dot, `Compacting ×2`, and `context at 173K/205K` as the target — because
+  that is the row the operator already reads as "something happened here". It has no
+  chevron (nothing behind it), 0.8 of the chat type, 2px margins, and it sits above the
+  live thinking pane: the transcript moves a compaction message that follows the pane's
+  post into that post's tail, before the pane, so it does not sit under the final tool
+  card until the turn ends. The line stays there when the pane goes away (25 Nov).
 - **A compact leaves the post and nothing else above it.** The post is a `<details>` from
   the session's metadata (`synapse.compacted`), so a reload shows it, and its open state is
   keyed like a reasoning fold's; `forgetConversation(dir, oldSessionId)` drops the fold lines

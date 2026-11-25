@@ -75,7 +75,8 @@ test('a finished compaction keeps the size the engine actually sent', () => {
     compactLimit: 204800,
     notes: [],
   });
-  assert.match(done, /Compacted ×2 · context at 165K\/205K/);
+  assert.match(done, /Compacted ×2/);
+  assert.match(done, /context at 165K\/205K/);
 });
 
 test('a compaction stays where it happened, not pinned under later work', () => {

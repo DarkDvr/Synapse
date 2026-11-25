@@ -582,7 +582,7 @@ contract('the Architect’s live reasoning is drawn inside its own post', () => 
   assert.match(js, /body\.splice\(1, 0, extras\)/, 'a download sits with the tool cards, above the reasoning');
   assert.doesNotMatch(js, /\$\{tail\}\$\{extras\}/, 'a download is never after the thinking pane');
   assert.match(js, /const liveTail = renderSessionStream\(\);/, 'the live step is computed once');
-  assert.match(js, /renderMessage\(m, i === paneAt \? liveTail : '', extras\)/, 'and only the newest assistant message carries it');
+  assert.match(js, /renderMessage\(m, i === paneAt \? paneTail : '', extras\)/, 'and only the newest assistant message carries it');
   // A download belongs inside the post it happened in (18 Nov), not after the conversation.
   assert.match(js, /downloadsInWindow\(downloads, at, until\)/, 'downloads are placed by post window');
   assert.doesNotMatch(js, /html \+ downloadCardsHtml\(\)/, 'the old end-of-chat strip is gone');
@@ -698,7 +698,7 @@ contract('a compaction is a line in the chat, in the trace format Multi uses', a
   // variable `line`, which the slide's attribute took over — the tag was left as
   // `class="trace"Compacted ×1`. A pattern that only looked for the sentence still
   // passed, so this asks for the attribute after the class (20 Nov).
-  assert.match(done, /class="trace"\s+data-line="msg:c1"/, 'the post lost its name, or the tag is broken');
+  assert.match(done, /class="trace is-compact-post"\s+data-line="msg:c1"/, 'the post lost its name, or the tag is broken');
   // The transcript holds the first one by the time the second is written — that is what
   // makes it the second, and the count is the chat´s, not this render´s.
   state.messages.push({ id: 'c1', type: 'compaction', created: 2000, raw: { status: 'completed', tokens: {} } });
