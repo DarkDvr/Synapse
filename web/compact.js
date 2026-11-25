@@ -126,7 +126,11 @@ export async function runCompact() {
     // The old chat has just left the list on purpose; do not read that as "the
     // open chat was removed" and close the view before opening its replacement.
     await loadProjects({ keepOpen: true });
-    if (out?.sessionId && state.sessionId !== out.sessionId) await wired.openSession(out.sessionId);
+    if (out?.sessionId && state.sessionId !== out.sessionId) {
+      // The replacement is the same conversation, not another one: open it without
+      // clearing the unsent draft or attachments the operator already has in the box.
+      await wired.openSession(out.sessionId, { keepDraft: true });
+    }
   } catch (err) {
     state.compacting = false;
     renderCompactChip();

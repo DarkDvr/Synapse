@@ -840,7 +840,7 @@ function clearSelection() {
     // A page with no selection API has nothing to clear.
   }
 }
-async function openSession(id) {
+async function openSession(id, { keepDraft = false } = {}) {
   // The previous chat's reading belongs to it: write it before the swap, including a
   // running `since`, so coming back later still knows when its turn began (16 Nov).
   flushClocks();
@@ -862,9 +862,14 @@ async function openSession(id) {
   state.lease = null;
   // A draft belongs to the chat it was typed in. Carrying it across the switch sent
   // one project's words into another as a Steer (21 Nov): the box goes with the chat.
-  if ($('promptInput')) $('promptInput').value = '';
-  state.attachments = [];
-  renderAttachments();
+  // A compact is the exception: the new session is the same conversation, so the
+  // operator's unsent sentence and attachments stay in the box (25 Nov) instead of
+  // making them retype everything after every handover.
+  if (!keepDraft) {
+    if ($('promptInput')) $('promptInput').value = '';
+    state.attachments = [];
+    renderAttachments();
+  }
   // The project lock belongs to the chat that was open, like the permissions and the
   // trace. Keeping it let the previous chat's "busy" answer read as this chat's work,
   // which armed the finished-work chime and sounded it when the poll caught up (14 Nov).

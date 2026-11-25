@@ -262,6 +262,11 @@ clock and picker joined into one row.
   keyed like a reasoning fold's; `forgetConversation(dir, oldSessionId)` drops the fold lines
   and alarms, which were that chat's evidence. A compact is also one quiet line where it
   happened: `⤵ Compacted — the conversation was summarised · 172K prompt, 2K summary`.
+- **A compact keeps the unsent box.** `openSession` clears the draft and attachments on a
+  normal chat switch because they belong to the chat they were typed in; the replacement a
+  compact opens is the same conversation, so it passes `{ keepDraft: true }` and leaves
+  both alone (25 Nov). Clearing them made the operator retype the message and re-attach the
+  files after every handover.
 - **A line that arrives animates.** The conversation is one rebuilt HTML string, so the page
   has to know what is new: every row that can arrive carries its name (`data-line="msg:<id>"`,
   `part:<message>:<index>`, `data-tool-card`, `data-trace`, a trace line's moment plus a
