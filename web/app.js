@@ -160,6 +160,7 @@ import {
   syncAskCustoms,
   askPanelWiring,
 } from './ask-panel.js';
+import { installAskAttachments } from './ask-attachments.js';
 import {
   setupModelPickers,
   syncPickerInput,
@@ -2262,6 +2263,9 @@ document.addEventListener('keydown', (e) => {
     askHostBox.addEventListener('input', (e) => {
       if (e.target.classList?.contains('ask-other-text')) autoGrow(e.target);
     });
+    // The question's own attachment strip: paste, drag/drop and the Attach button.
+    // One install on the persistent host; the panel inside it is rebuilt.
+    installAskAttachments(askHostBox);
   }
 
   // Collapse or open one trace's thinking pane. The flag lives on the trace, so it

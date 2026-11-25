@@ -480,7 +480,7 @@ export function reuseMessage(messageId) {
 // same rules. A paste longer than ten lines (or 1,200 characters) becomes a text
 // file instead of a wall in the box — the operator's DeepSeek-style cutoff.
 const ATTACH_MAX_BYTES = 8 * 1024 * 1024;
-const ATTACH_TOTAL_BYTES = 48 * 1024 * 1024;
+export const ATTACH_TOTAL_BYTES = 48 * 1024 * 1024;
 const ATTACH_MAX_COUNT = 24;
 const PASTE_TEXT_MAX_LINES = 10;
 const PASTE_TEXT_MAX_CHARS = 1200;
@@ -509,15 +509,30 @@ function pastedTextFile(text) {
 
 /** Add files to the composer, with the size and count rules the picker uses. */
 export async function addAttachmentFiles(files) {
+  const added = await addFilesToList(state.attachments, files);
+  if (added) {
+    namePasted(state.attachments);
+    renderAttachments();
+  }
+  return added;
+}
+
+/**
+ * The same rules for any attachment strip: the composer's, and the question
+ * panel's. A file that is too large, too many, or past the total budget is
+ * refused with a toast; the rest still go. Never throws.
+ */
+export async function addFilesToList(target, files) {
+  const list = target || [];
   let added = 0;
-  let used = attachmentBytes();
+  let used = attachmentBytes(list);
   for (const file of files || []) {
     if (!file) continue;
     if (file.size > ATTACH_MAX_BYTES) {
       toast('File Too Large', `${file.name || 'That file'} is ${fmtBytes(file.size)}; the limit is 8 MB per file.`);
       continue;
     }
-    if (state.attachments.length >= ATTACH_MAX_COUNT) {
+    if (list.length >= ATTACH_MAX_COUNT) {
       toast(
         'Too Many Files',
         `${ATTACH_MAX_COUNT} attachments is the limit for one message. The total size is the real limit; this is only the count cap.`,
@@ -533,22 +548,19 @@ export async function addAttachmentFiles(files) {
     }
     try {
       const attachment = await readFileAsAttachment(file);
-      state.attachments.push(attachment);
+      list.push(attachment);
       used += attachment.size;
       added += 1;
     } catch (err) {
       toast('Could Not Read That File', err.message);
     }
   }
-  if (added) {
-    namePasted(state.attachments);
-    renderAttachments();
-  }
   return added;
 }
 
 /** The files in a clipboard event, whichever way the browser spells them. */
-function clipboardFiles(dt) {
+export function filesFromClipboard(dt) {
+  if (!dt) return [];
   const files = [...(dt.files || [])];
   if (files.length) return files;
   for (const item of [...(dt.items || [])]) {
@@ -578,7 +590,7 @@ function hideDropHint() {
 }
 
 /** Does this drag carry files from the operating system? */
-function dragHasFiles(e) {
+export function hasDragFiles(e) {
   return [...(e.dataTransfer?.types || [])].includes('Files');
 }
 
@@ -600,27 +612,27 @@ export function installChatDrop() {
   if (!dock) return;
 
   dock.addEventListener('dragenter', (e) => {
-    if (!dragHasFiles(e)) return;
+    if (!hasDragFiles(e)) return;
     e.preventDefault();
     if (composerAcceptsFiles()) showDropHint(true);
   });
 
   dock.addEventListener('dragover', (e) => {
-    if (!dragHasFiles(e)) return;
+    if (!hasDragFiles(e)) return;
     // Without this the WebView2 navigates to the dropped file and the app is gone.
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = composerAcceptsFiles() ? 'copy' : 'none';
   });
 
   dock.addEventListener('dragleave', (e) => {
-    if (!dragHasFiles(e)) return;
+    if (!hasDragFiles(e)) return;
     // Crossing from the transcript to the composer is not leaving the chat.
     if (e.relatedTarget && dock.contains(e.relatedTarget)) return;
     hideDropHint();
   });
 
   dock.addEventListener('drop', async (e) => {
-    if (!dragHasFiles(e)) return;
+    if (!hasDragFiles(e)) return;
     e.preventDefault();
     hideDropHint();
     if (!composerAcceptsFiles()) {
@@ -647,10 +659,10 @@ export function installChatDrop() {
   // A drop outside the chat is still a file the WebView would navigate to. The
   // page swallows it rather than replacing the app with a picture.
   document.addEventListener('dragover', (e) => {
-    if (dragHasFiles(e)) e.preventDefault();
+    if (hasDragFiles(e)) e.preventDefault();
   });
   document.addEventListener('drop', (e) => {
-    if (dragHasFiles(e) && !e.target.closest?.('#chatDock')) e.preventDefault();
+    if (hasDragFiles(e) && !e.target.closest?.('#chatDock')) e.preventDefault();
   });
 }
 
@@ -666,7 +678,7 @@ export async function onComposerPaste(e) {
   const dt = e.clipboardData;
   if (!dt) return;
 
-  const files = clipboardFiles(dt);
+  const files = filesFromClipboard(dt);
   if (files.length) {
     e.preventDefault();
     await addAttachmentFiles(files);

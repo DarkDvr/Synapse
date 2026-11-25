@@ -19,6 +19,7 @@ import { placeAskHost } from './chat-scroll.js';
 import { currentForm } from './run-view.js';
 import { renderTranscript, forceNextRender } from './transcript.js';
 import { renderComposer } from './composer.js';
+import { askAttachmentList, clearAskAttachments, renderAskAttachments, resetAskAttachments } from './ask-attachments.js';
 
 const missing = (name) => () => {
   throw new Error(`ask-panel.js: ${name} was not wired at boot`);
@@ -128,9 +129,14 @@ export function renderAskPanel() {
     stopAskCountdown();
     host.hidden = true;
     host.innerHTML = '';
+    resetAskAttachments('');
+    clearAskAttachments();
     syncAskState();
     return;
   }
+  // A new question starts with an empty strip; the same question keeps whatever
+  // the operator has already added while the panel is polled and rebuilt.
+  resetAskAttachments(form.id);
   // The panel is polled like everything else, and rebuilding it would throw away
   // whatever the operator had already answered — so it is only rebuilt when the
   // form itself changed. Answers live in the DOM, and the signature deliberately
@@ -159,6 +165,7 @@ export function renderAskPanel() {
     host.hidden = false;
     mountAskPost();
     paintAskNote();
+    renderAskAttachments();
     return;
   }
   state.askSig = sig;
@@ -170,19 +177,24 @@ export function renderAskPanel() {
       <span class="ask-head-note">${esc(paintAskNoteText())}</span>
     </div>
     <div class="ask-fields">${(form.fields || []).map(askField).join('')}</div>
+    <div class="attach-strip ask-attach-strip" id="askAttachStrip" hidden></div>
     <div class="ask-actions">
+      <button class="btn btn-back btn-sm" id="askAttachBtn" type="button" title="Attach a file to your answer">Attach</button>
+      <input type="file" id="askAttachInput" multiple hidden />
       <span class="ask-state" data-ask-state></span>
       <span class="ask-progress" data-ask-progress hidden></span>
       <button class="btn btn-back btn-sm" data-ask-back hidden>Back</button>
       <button class="btn btn-ask btn-sm" data-ask-next hidden>Next</button>
       <button class="btn btn-ask btn-sm" data-form-reply="${esc(form.id)}" hidden>Submit Answer</button>
     </div>
+    <div class="ask-drop" id="askDrop" hidden aria-hidden="true">Drop Files To Attach</div>
   </div>`;
   // A new form starts at its first question. The page is *not* reset on a poll:
   // an unchanged signature returns above, so a rebuild never moves the operator.
   state.askPage = 0;
   mountAskPost();
   refreshAskPanel();
+  renderAskAttachments();
   // A question is the thing the run is waiting on: show it, even if the operator
   // had scrolled up to read. It is placed at the end of the chat, *under* the report
   // that raised it, so the reason is read before the question (chat-scroll.js).
@@ -481,6 +493,59 @@ export function syncAskCustoms(target) {
 // the case where another window answered first.
 export const replyingForms = new Set();
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Give the question's files to the model after its answer has settled.
+ *
+ * The engine's form reply takes an answer and nothing else — there is no `files`
+ * on `Form.Reply` — so an attachment cannot ride the reply itself. It follows as a
+ * steer, which the engine reads at the turn's next step; if the turn has already
+ * ended, an Architect gets it as a message so the file is still seen. A worker's
+ * form gets only the steer: a message would brief that session as the Architect.
+ */
+async function deliverAskFiles(files, form, sessionId) {
+  if (!files.length) return { attached: 0 };
+  const payload = files.map((f) => ({ name: f.name, mime: f.mime, data: f.data }));
+  const title = String(form?.title || 'the question').replace(/\s+/g, ' ').trim().slice(0, 160);
+  const names = files.map((f) => f.name).join(', ');
+  const text =
+    `The operator attached ${files.length} file${files.length === 1 ? '' : 's'} to their answer ` +
+    `to "${title}": ${names}. Look at ${files.length === 1 ? 'it' : 'them'} before continuing.`;
+  let last = null;
+  // The reply returns before the engine has necessarily marked the turn active;
+  // a steer in that gap is answered "nothing is running". Five short tries cover
+  // the resume without making the operator wait on a clock.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/steer`, { text, files: payload });
+      return { attached: files.length };
+    } catch (err) {
+      last = err;
+      if (err.status !== 409 || !err.body?.notBusy) break;
+      await wait(160);
+    }
+  }
+  // Only the operator's own chat can take a message: for a worker this would
+  // brief that worker as if it were the Architect.
+  if (form?.sessionId === state.sessionId) {
+    try {
+      await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
+        text,
+        files: payload,
+        mode: state.mode,
+      });
+      return { attached: files.length };
+    } catch (err) {
+      last = err;
+    }
+  }
+  return {
+    attached: 0,
+    warning: last?.message || 'the files did not reach the chat',
+  };
+}
+
 export async function replyForm(formId) {
   if (replyingForms.has(formId)) return;
   const form = currentForm();
@@ -490,10 +555,14 @@ export async function replyForm(formId) {
   // in the session that asked it.
   const sessionId = form.sessionId || state.sessionId;
   const answer = collectAskAnswer(form);
+  const files = askAttachmentList().slice();
   const btn = document.querySelector(`[data-form-reply="${CSS.escape(formId)}"]`);
   if (btn) btn.disabled = true;
+  const attachBtn = document.querySelector('#askAttachBtn');
+  if (attachBtn) attachBtn.disabled = true;
   try {
     await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/forms/${encodeURIComponent(formId)}/reply`, { answer });
+    clearAskAttachments();
     state.forms = state.forms.filter((f) => f.id !== formId);
     renderAskPanel();
     // The rail's Answer mark is part of the same fact: clear it now, or it
@@ -501,13 +570,21 @@ export async function replyForm(formId) {
     wired.renderTree();
     renderComposer();
     renderTranscript();
-    toast('Answer Sent', 'The chat will carry on from it.');
+    const delivery = files.length ? await deliverAskFiles(files, form, sessionId) : { attached: 0 };
+    toast(
+      'Answer Sent',
+      delivery.attached
+        ? `The chat will carry on from it, and ${delivery.attached} file${delivery.attached === 1 ? '' : 's'} followed.`
+        : 'The chat will carry on from it.',
+    );
+    if (delivery.warning) toast('Files Did Not Follow', delivery.warning, 8000);
   } catch (err) {
     // A question can be cancelled under us: the engine rebuilds its locations when
     // it restarts, and every pending form goes with them. Answering one that no
     // longer exists is not the operator's mistake, and leaving the dead panel up
     // means they keep pressing a button that cannot work.
     if (/Form not found/i.test(String(err.message || ''))) {
+      clearAskAttachments();
       state.forms = state.forms.filter((f) => f.id !== formId);
       renderAskPanel();
       renderComposer();
@@ -519,6 +596,7 @@ export async function replyForm(formId) {
     // Auto-Answer countdown — between this page drawing it and the click. The
     // answer did not apply, but the panel must not stay up with a dead button.
     if (/already settled/i.test(String(err.message || ''))) {
+      clearAskAttachments();
       state.forms = state.forms.filter((f) => f.id !== formId);
       renderAskPanel();
       wired.renderTree();
@@ -527,6 +605,7 @@ export async function replyForm(formId) {
       toast('That Question Was Already Answered', 'It was settled a moment ago — here or in another window.');
       return;
     }
+    if (attachBtn) attachBtn.disabled = false;
     toast('Could Not Send The Answer', err.message);
     wired.refreshPending();
   } finally {

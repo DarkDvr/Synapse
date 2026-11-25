@@ -447,6 +447,15 @@ meant guessing what had been said.
   continue`; Attach, the mode switch and the run menu go with it, because a half-dead
   composer invites a click that goes nowhere. **Stop stays live** — it is the way out of a
   question nobody can answer, and the engine treats it as the immediate stop.
+- **A question can carry files.** The panel has its own strip, under the composer's rules
+  (8 MB each, 48 MB total, 24 files), with the Attach button, paste and a drop anywhere on
+  the panel. The engine's `Form.Reply` accepts an `answer` and nothing else, so the files
+  cannot ride the reply: they follow as a short steer once the answer settles, and an
+  Architect whose turn already ended gets them as a message instead. A worker's form gets
+  the steer only — a message into that session would brief it as the Architect. There is no
+  Keep box in the panel for the same reason the engine has no file field: a steer does not
+  go through the chat's kept-copy path, and a checkbox that only sometimes kept the file
+  would be a lie. The strip is empty on a new form and survives a poll of the same one.
 - **A new question takes the chat's place:** on a new form signature the page arms the
   follow and scrolls to the end, because that is what the run is waiting on; otherwise the
   reader's position is respected. **A form opens the dock** — `has-history` holds while a

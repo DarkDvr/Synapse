@@ -2123,6 +2123,7 @@ details:not([open]) > [data-fold-body] { display: none; }
      for the question to post in its entirety — a question you have to scroll *inside*
      a box inside a chat is a question with two scrollbars. If it is taller than the
      chat, the chat scrolls, as it does for any long message. */
+  position: relative;
   display: flex; flex-direction: column;
   background: #1a1c20; border: 1px solid var(--orange);
   border-radius: 8px; padding: 8px 11px 0;
@@ -2255,6 +2256,21 @@ details:not([open]) > [data-fold-body] { display: none; }
 .ask-actions .btn ~ .btn { margin-left: 8px; }
 .ask-actions .btn[hidden] { display: none; }
 .ask-actions .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* The question's attachments sit between the fields and the buttons. The strip
+   reuses the composer's chips, so a file looks the same in both places. */
+.ask-attach-strip { margin-top: 7px; padding: 0 0 2px; }
+/* The target is the whole panel, not the 18px paperclip. Dashed violet is the
+   drop affordance the chat uses, so the same gesture reads the same way. */
+.ask-drop {
+  position: absolute; inset: 4px; z-index: 3;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px dashed var(--violet-bright); border-radius: 7px;
+  background: rgba(20, 22, 27, 0.9); color: #fff;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+  pointer-events: none;
+}
+.ask-drop[hidden] { display: none; }
+.ask-panel.is-drop-target { border-color: var(--violet-bright); }
 
 /* the one orange fill in the panel: white on orange, never orange on orange */
 .btn-ask {

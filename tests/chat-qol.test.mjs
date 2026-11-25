@@ -31,7 +31,7 @@ test('the whole chat is a drop target for files, and only while the composer can
   assert.match(js, /export function composerAcceptsFiles\(\)/, 'nothing decides whether the chat can take a file');
   assert.match(js, /!input\.disabled && !state\.compacting/, 'a blocked composer still accepts drops');
   assert.match(js, /addAttachmentFiles\(files\)/, 'a dropped file does not reach the attachment strip');
-  assert.match(js, /dragHasFiles/, 'a drag without files is treated as an attachment');
+  assert.match(js, /hasDragFiles/, 'a drag without files is treated as an attachment');
   assert.match(js, /e\.preventDefault\(\)/, 'the WebView would navigate to the dropped file');
   const html = read('web/index.html');
   assert.match(html, /id="chatDrop"/, 'no drop hint node');
