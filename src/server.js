@@ -289,6 +289,13 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     // GET /api/status
     if (seg[0] === 'status' && method === 'GET') return sendJson(res, 200, await api.status());
 
+    // GET /api/work — is anything running? The one answer a restart or a stop
+    // consults. Host only: it names the sessions that are working.
+    if (seg[0] === 'work' && seg.length === 1 && method === 'GET') {
+      if (fromLan) return sendJson(res, 403, { error: 'work is reported on the host only' });
+      return sendJson(res, 200, await api.work());
+    }
+
     // GET /api/views — who is connected, and who is editing Settings. The page
     // asks once on load; live changes arrive as `presence` and `settings-lock`.
     if (seg[0] === 'views' && method === 'GET') {

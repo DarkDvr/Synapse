@@ -3,29 +3,31 @@
 Restarting the app, protecting the harness's own files, and the housekeeping nobody
 should have to remember.
 
-## Is a turn live? — the check before a restart
+## Restarting is the operator's
 
-`/api/runs` lists **delegations**, not the Architect reading, thinking or calling a tool.
-On 11 Nov a restart with `runs: 0` killed the operator's own turn mid-sentence: the run
-list was empty because it is not a run, and `/api/pending` said `active: []` because
-there was no card to show. The turn was still live.
+**An agent never stops, kills or relaunches Synapse.** Not after a build, not to apply a
+version, not to check whether the new one works. A check that an agent can skip is not a
+guard — this used to be a script (`scripts\wait-for-idle.mjs`) and a paragraph of
+instructions, and it was skipped twice. It is gone.
 
-**Use the script, not a hand-written check** (added 12 Nov after a second turn was
-killed):
+The app makes a shell restart survivable: a server left by a previous shell is **adopted**
+on the next launch instead of killed, so its turn, its worker and its question keep
+running while the window comes back. The server also refuses a restart or a stop while
+work is live:
 
 ```
-bin\node\node.exe scripts\wait-for-idle.mjs          # exits 0 when idle, 1 when not
-bin\node\node.exe scripts\wait-for-idle.mjs --timeout 300
+GET  /api/work     # { busy, reasons } — the one answer
+POST /api/restart  # 200 with { ok:false, blocked:true, reasons } while work is live
 ```
 
-It asks three questions and needs all three idle, because each earlier check was right
-about one thing and blind to another:
+The answer is built from the engine's `/api/session/active`, the runner's live runs, the
+local lease, the queued sends, and any assistant message without `completed`. That last
+check is the backstop: `/api/runs` is delegations, not the Architect thinking, and a turn
+can be live with the run list empty.
 
-1. **the engine's `/api/session/active`** — workers included; the authority, and it
-   survives a page reload;
-2. **`/api/pending`** — a card, a question, or a stop in progress;
-3. **every chat's transcript** — an assistant message with no `completed` is a live turn,
-   and **any** such message counts, not only the last: a steer can arrive after it.
+**A forced kill is not a restart.** `Stop-Process`/Task Manager bypass every in-process
+check. That is why the rule above is behaviour, not a button: the app can survive the
+window going away, but it cannot survive someone killing the server with it.
 
 ## Protecting the harness's own files
 

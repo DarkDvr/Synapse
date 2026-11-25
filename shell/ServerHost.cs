@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -64,6 +65,10 @@ public sealed class ServerHost : IDisposable
     public event Action<string>? Attention;
 
     public ServerState State { get; private set; } = ServerState.Stopped;
+
+    /// <summary>Why the server refused the last stop, in its own words. Empty when
+    ///  the stop was allowed or nothing has been asked.</summary>
+    public string LastStopRefusal { get; private set; } = string.Empty;
 
     /// <summary>Where the UI will be served once the server is up.</summary>
     public string Url { get; private set; }
@@ -143,6 +148,70 @@ public sealed class ServerHost : IDisposable
             && !full.Contains("ai.opencode.desktop", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Take over a server a previous shell left running, instead of killing it.
+    ///
+    /// A force-killed window leaves the server and its engine alive. The old start
+    /// path called them leftovers and killed them, which is how a shell restart took
+    /// a live turn with it. A server that is still answering is not a leftover: it is
+    /// the work, and the new window can serve its page and watch it.
+    ///
+    /// The pid is trusted only when its executable is provably inside this folder,
+    /// and only when `/api/status` answers. A stale pid or a half-started server
+    /// falls through to the normal cleanup.
+    /// </summary>
+    bool TryAdopt()
+    {
+        var pidFile = Path.Combine(_root, "data", "synapse.pid");
+        int pid;
+        try
+        {
+            if (!File.Exists(pidFile)) return false;
+            if (!int.TryParse(File.ReadAllText(pidFile).Trim(), out pid) || pid <= 0) return false;
+        }
+        catch { return false; }
+
+        Process? proc = null;
+        try
+        {
+            proc = Process.GetProcessById(pid);
+            if (proc.HasExited) { proc.Dispose(); return false; }
+            string path;
+            try { path = proc.MainModule?.FileName ?? string.Empty; }
+            catch { proc.Dispose(); return false; }
+            if (!IsOurs(path)) { proc.Dispose(); return false; }
+            if (!Answers(Url)) { proc.Dispose(); return false; }
+
+            proc.EnableRaisingEvents = true;
+            proc.Exited += (_, _) => OnExited(proc);
+            lock (_gate) _child = proc;
+            _console.Append($"[app] adopted the server left running (pid {pid}); its work continues{Environment.NewLine}");
+            Set(ServerState.Running);
+            return true;
+        }
+        catch
+        {
+            try { proc?.Dispose(); } catch { /* already gone */ }
+            return false;
+        }
+    }
+
+    /// <summary>Does the server at this address answer its own status route?</summary>
+    static bool Answers(string url)
+    {
+        try
+        {
+            var check = Task.Run(async () =>
+            {
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+                using var response = await http.GetAsync($"{url}/api/status");
+                return response.IsSuccessStatusCode;
+            });
+            return check.Wait(2500) && check.Result;
+        }
+        catch { return false; }
+    }
+
     public void Start()
     {
         lock (_gate)
@@ -150,6 +219,11 @@ public sealed class ServerHost : IDisposable
             if (_child is { HasExited: false }) return;
         }
         _stopping = false;
+
+        // A window that was force-closed leaves the server alive. Adopt it before
+        // the cleanup below, or the next launch kills the turn the operator is
+        // waiting on.
+        if (TryAdopt()) return;
 
         // Before anything is spawned: a crash leaves the last server, the engine and the
         // engine's MCP children alive, still holding 8700 and 8720. The next start then
@@ -242,7 +316,17 @@ public sealed class ServerHost : IDisposable
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             using var body = new StringContent(string.Empty, Encoding.UTF8, "application/json");
-            await http.PostAsync($"{Url}/api/shutdown", body);
+            using var response = await http.PostAsync($"{Url}/api/shutdown", body);
+            var text = await response.Content.ReadAsStringAsync();
+            if (Refused(response, text))
+            {
+                // The server is guarding live work. This is not a failed request to
+                // retry with a kill: put the state back and report what it said.
+                LastStopRefusal = ErrorText(text, "Synapse is working; nothing was stopped.");
+                _stopping = false;
+                Set(ServerState.Running);
+                return false;
+            }
         }
         catch
         {
@@ -269,10 +353,42 @@ public sealed class ServerHost : IDisposable
         return true;
     }
 
-    public async Task RestartAsync()
+    public async Task<bool> RestartAsync()
     {
-        await StopAsync();
+        if (!await StopAsync()) return false;
         Start();
+        return true;
+    }
+
+    /// <summary>Did the server answer "not while work is live"?</summary>
+    static bool Refused(HttpResponseMessage response, string text)
+    {
+        if (response.StatusCode == HttpStatusCode.Conflict) return true;
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("ok", out var ok)
+                && ok.ValueKind == JsonValueKind.False;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>The server's sentence from its refusal, not a raw JSON blob.</summary>
+    static string ErrorText(string text, string fallback)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("error", out var error)
+                && error.ValueKind == JsonValueKind.String)
+            {
+                return error.GetString() ?? fallback;
+            }
+        }
+        catch { /* a refusal that is not JSON is still worth showing */ }
+        return string.IsNullOrWhiteSpace(text) ? fallback : text.Trim();
     }
 
     void OnLine(string line)

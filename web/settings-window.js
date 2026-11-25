@@ -645,8 +645,23 @@ export async function restartSynapse() {
   $('restartCurtain').hidden = false;
   $('restartState').textContent = 'Stopping Synapse…';
   try {
-    await api('POST', '/api/restart');
-  } catch {
+    const out = await api('POST', '/api/restart');
+    if (out?.ok === false) {
+      // The server refused because work is live. Nothing went down; take the
+      // curtain away and say what is running rather than waiting for a restart
+      // that was never going to happen.
+      $('restartCurtain').hidden = true;
+      $('restartCurtain').classList.remove('is-stuck');
+      toast('Restart Refused', out.error || 'Synapse is working.');
+      return;
+    }
+  } catch (err) {
+    if (err.status === 409 || err.body?.blocked) {
+      $('restartCurtain').hidden = true;
+      $('restartCurtain').classList.remove('is-stuck');
+      toast('Restart Refused', err.message || 'Synapse is working.');
+      return;
+    }
     // The connection dropping is the expected answer: the server is going away.
   }
   $('restartState').textContent = 'Waiting for Synapse to come back…';

@@ -186,7 +186,7 @@ public partial class App : Application
         _menu.Items.Add(new Forms.ToolStripSeparator());
         _menu.Items.Add(Item("Start Server", () => Server.Start(), idle && !running));
         _menu.Items.Add(Item("Stop Server…", () => _ = StopServerAsync(), idle && running));
-        _menu.Items.Add(Item("Restart Server", () => _ = Server.RestartAsync(), idle && running));
+        _menu.Items.Add(Item("Restart Server", () => _ = RestartServerAsync(), idle && running));
         _menu.Items.Add(new Forms.ToolStripSeparator());
         _menu.Items.Add(Item("Open Logs Folder", OpenLogs, true));
         _menu.Items.Add(Item("Exit Synapse", () => _ = ExitAsync(), true));
@@ -221,14 +221,41 @@ public partial class App : Application
         var answer = System.Windows.MessageBox.Show(
             _window,
             "Stop the Synapse server?\n\n" +
-            "Anything running now is stopped: a turn in progress is lost, and the engine is shut down with it. " +
+            "If a turn, a run or a question is live, Synapse will refuse and tell you what is running. " +
+            "An idle server stops cleanly and the engine goes with it. " +
             "The window stays open and Start Server brings it back.",
             "Stop Server",
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning,
             MessageBoxResult.Cancel);
         if (answer != MessageBoxResult.OK) return;
-        await Server.StopAsync();
+        if (!await Server.StopAsync())
+        {
+            System.Windows.MessageBox.Show(
+                _window,
+                Server.LastStopRefusal,
+                "Synapse Is Working",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Restart through the server, so its work check decides. A direct
+    /// `Server.RestartAsync` would stop the process first and ask afterwards.
+    /// </summary>
+    internal async Task RestartServerAsync()
+    {
+        ShowWindow();
+        if (!await Server.RestartAsync())
+        {
+            System.Windows.MessageBox.Show(
+                _window,
+                Server.LastStopRefusal,
+                "Synapse Is Working",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     void OpenLogs()
@@ -252,7 +279,22 @@ public partial class App : Application
         if (_exiting) return;
         _exiting = true;
         try { if (_tray != null) _tray.Visible = false; } catch { /* exiting */ }
-        try { await Server.StopAsync(); } catch { /* exiting */ }
+        var stopped = true;
+        try { stopped = await Server.StopAsync(); } catch { /* exiting */ }
+        if (!stopped)
+        {
+            // Quit is a stop like any other. The server refused because work is
+            // live; keep the window and say why instead of killing it anyway.
+            _exiting = false;
+            try { if (_tray != null) _tray.Visible = true; } catch { /* exiting */ }
+            System.Windows.MessageBox.Show(
+                _window,
+                Server.LastStopRefusal,
+                "Synapse Is Working",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
         Server.Dispose();
         Console.Dispose();
         try { _tray?.Dispose(); } catch { /* exiting */ }

@@ -455,6 +455,112 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   }
 
   /**
+   * Is any work in progress, and why — for a restart or a shutdown.
+   *
+   * This is deliberately one server-side answer, not a checklist a caller has to
+   * remember. The old pre-restart script asked the same three questions, but it sat
+   * in `scripts\` where nobody was forced to run it; a check that can be skipped is
+   * not a guard. The restart route cannot skip this one.
+   *
+   * The engine's active list is the authority for a turn, the runner's live map for
+   * a delegated run, and the local lease for a message still waiting to start. A
+   * transcript with an unfinished assistant message is the backstop for the case
+   * the active list missed — exactly the case that killed two turns.
+   */
+  async function workInProgress() {
+    const reasons = new Set();
+    const add = (text) => {
+      const value = String(text || '').trim();
+      if (value) reasons.add(value);
+    };
+    // A transcript message left unfinished by a crash is not work forever. Only a
+    // session touched in the last ten minutes can be the backstop; a live turn is
+    // caught by the engine's active list first, however long it runs.
+    const recentMs = 10 * 60 * 1000;
+    const ready = engine.status().ready === true;
+    const active = [];
+    if (ready) {
+      try {
+        for (const id of (await engine.listActiveSessions()) || []) {
+          active.push(id);
+          add(`session ${id} is active in the engine`);
+        }
+      } catch (err) {
+        add(`the engine did not report its active sessions: ${err.message}`);
+      }
+    }
+
+    // A question or a permission card is work as much as a turn is: the session is
+    // blocked on the operator, and a restart would abandon the card.
+    if (ready) {
+      const globalForms = await safe(() => engine.listForms(), []);
+      const localForms = await Promise.all((active || []).map((id) => safe(() => engine.listForms(id), [])));
+      const forms = new Set();
+      for (const list of [globalForms, ...localForms]) {
+        for (const form of list || []) if (form?.id) forms.add(form.id);
+      }
+      if (forms.size) add(`${forms.size} question(s) waiting`);
+
+      const globalPermissions = await safe(() => engine.listPendingPermissions(), []);
+      const localPermissions = await Promise.all((active || []).map((id) => safe(() => engine.listSessionPermissions(id), [])));
+      const permissions = new Set();
+      for (const list of [globalPermissions, ...localPermissions]) {
+        for (const request of list || []) {
+          const id = request?.id || request?.requestID;
+          if (id) permissions.add(id);
+        }
+      }
+      if (permissions.size) add(`${permissions.size} permission request(s) waiting`);
+    }
+
+    let live = [];
+    try {
+      live = runs?.active?.() || [];
+    } catch { /* the runner can be between maps; the engine list still speaks */ }
+    for (const run of live) add(`run ${run.task || ''} (${run.role || ''}) is running`);
+
+    try {
+      const lease = localLease?.state?.();
+      for (const held of lease?.held || []) add(`the local server is held by ${held.holder || 'another project'}`);
+      for (const waiting of lease?.queue || []) add(`a message is waiting for ${waiting.server || 'the local server'}`);
+    } catch { /* a lease view that cannot be read is not a reason to restart */ }
+
+    try {
+      const queued = loadQueued();
+      if (queued.length) add(`${queued.length} message(s) waiting for the local server`);
+    } catch { /* an unreadable queue is not proof of work */ }
+
+    // The backstop: any assistant message the engine has not completed is a turn
+    // that is still open, whatever the active list says.
+    if (ready) {
+      let sessions = [];
+      try {
+        sessions = await engine.listSessions();
+      } catch (err) {
+        add(`the engine did not report its sessions: ${err.message}`);
+      }
+      for (const session of sessions || []) {
+        const touched = Number(session.updated || session.created || 0);
+        // A session that has not moved for ten minutes and is not in the active
+        // list is history, not work. Without this a crash's half-written assistant
+        // message would refuse every future restart.
+        if (!active.includes(session.id) && (!touched || Date.now() - touched > recentMs)) continue;
+        let messages = [];
+        try {
+          messages = await engine.getMessages(session.id);
+        } catch {
+          // A session deleted between the list and the read has no turn to lose.
+          continue;
+        }
+        const open = (messages || []).filter((m) => m?.type === 'assistant' && !m.completed).length;
+        if (open) add(`${session.title || session.id}: ${open} unfinished assistant message(s)`);
+      }
+    }
+
+    return { busy: reasons.size > 0, reasons: [...reasons] };
+  }
+
+  /**
    * Which roles this *session* has used, ever.
    *
    * The operator's rule: a non-Architect card starts dim and goes solid the first
@@ -1332,17 +1438,41 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
 
     // Settings > Save Changes asks whether to restart. The engine and the server
     // read their settings at start, so this is the honest answer to "apply now".
+    // The answer is "not while work is live": the check is here, in the only route
+    // that can restart, rather than in a script a caller may forget.
     restart: async () => {
       if (!restart) return { ok: false, error: 'This build cannot restart itself.' };
+      const work = await workInProgress().catch((err) => ({ busy: true, reasons: [err.message] }));
+      if (work.busy) {
+        return {
+          ok: false,
+          blocked: true,
+          reasons: work.reasons,
+          error: `Synapse is working: ${work.reasons.join('; ')}. Nothing was restarted.`,
+        };
+      }
       return restart();
     },
 
     // Tray > Stop Server. Graceful, like the restart: the engine is stopped by the
-    // same shutdown path rather than being killed with its parent.
+    // same shutdown path rather than being killed with its parent. A stop is a
+    // restart with a different ending, so it gets the same work check.
     shutdown: async () => {
       if (!stopSelf) return { ok: false, error: 'This build cannot stop itself.' };
+      const work = await workInProgress().catch((err) => ({ busy: true, reasons: [err.message] }));
+      if (work.busy) {
+        return {
+          ok: false,
+          blocked: true,
+          reasons: work.reasons,
+          error: `Synapse is working: ${work.reasons.join('; ')}. Nothing was stopped.`,
+        };
+      }
       return stopSelf();
     },
+
+    /** The single answer a restart or a stop must consult. */
+    work: async () => workInProgress(),
 
     /**
      * Arm the timed shutdown for this finish.

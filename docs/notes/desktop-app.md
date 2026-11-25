@@ -78,12 +78,14 @@ program files under `data\backups\`, overlays the stage and starts `Synapse.exe`
 stage never contains `data\`, `config\` or the projects folder. A failed copy restores
 the backup and still starts the old version.
 
-**A crash leaves things running, so the next start cleans up.** A kill from Task
+**A crash leaves things running, so the next start adopts them.** A kill from Task
 Manager once left the server, the engine and four MCP children alive, still holding
-8700 and 8720, and the next launch failed with `EADDRINUSE`. `ServerHost.Start()`
-reads `data\synapse.pid` and `data\engine.pid` and acts only on a pid whose executable
-is still inside this folder — the same identity rule as everywhere else. The server
-goes first, because its tree holds the engine.
+8700 and 8720, and the next launch failed with `EADDRINUSE`. `ServerHost.Start()` now
+reads `data\synapse.pid`, proves the pid is still our executable inside this folder, and
+asks `/api/status`; a live answer means the server is **adopted**, not killed, so the turn
+it is running survives the window coming back. Only when there is no live server does it
+fall back to the old cleanup, server first because its tree holds the engine. A stale pid
+or a half-started server is not adopted.
 
 **The console is in the window.** `logger` mirrors the `app` channel and every warning
 or error to stdout; the shell captures that into `logs\console.log` and a ring buffer
@@ -96,12 +98,13 @@ and Stop beside Close, with one of them always disabled.
 
 **The app stops and starts; the window stays.** Stop Server from the tray warns first
 in a **native dialog**, because the page may already be down; consent `POST`s
-`/api/shutdown` so the engine is stopped rather than orphaned. A deliberate stop or a
-crash does not swap the window to the boot panel — the Engine row goes red and the
-console is one click away. When the server comes back the shell reloads the page,
-because everything on it was fetched from a server that no longer exists.
-`web/offline.html` carries a Start Server button, shown only while the server is
-stopped or has failed.
+`/api/shutdown` so the engine is stopped rather than orphaned. The server refuses that
+request — and `/api/restart` — while work is live, and the shell shows the refusal instead
+of falling through to its kill fallback. A deliberate stop or a crash does not swap the
+window to the boot panel — the Engine row goes red and the console is one click away. When
+the server comes back the shell reloads the page, because everything on it was fetched
+from a server that no longer exists. `web/offline.html` carries a Start Server button,
+shown only while the server is stopped or has failed.
 
 ## 5. The window
 

@@ -480,12 +480,13 @@ public partial class MainWindow : Window
                 _server.Start();
                 break;
             case "restart":
-                await _server.RestartAsync();
+                if (Application.Current is App restartHost) await restartHost.RestartServerAsync();
+                else await _server.RestartAsync();
                 break;
             case "stop":
                 // The tray and the console ask the same question in the same place,
                 // so they cannot drift into two different warnings.
-                if (Application.Current is App app) await app.StopServerAsync();
+                if (Application.Current is App stopHost) await stopHost.StopServerAsync();
                 break;
         }
     }

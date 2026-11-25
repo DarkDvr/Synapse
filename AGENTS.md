@@ -112,10 +112,11 @@ live, bump, commit, tag `vX.Y.Z`, and push `main` and the tag. **A GitHub releas
 operator's call** (`docs/notes/releases.md`): the zip, `SHA256SUMS` and the release page
 happen only when they ask. A docs-only change is a commit, not a release.
 
-**Then restart the whole app**: stop it, launch `Synapse.exe` — window, tray and server. A
-server-only restart leaves the page on the old build; check the version. **Read `/api/runs`
-and `/api/pending` immediately before the stop** — an earlier reading is stale. The last
-word on a live turn is `scripts\wait-for-idle.mjs` (`docs/notes/runbook.md`).
+**Then stop, and tell the operator.** You never restart, stop or kill Synapse — not after
+a build, not to apply a version, not to see whether it works. The app adopts a server left
+by a previous shell and the server refuses a restart while work is live, but neither makes
+a forced kill safe. Finished work ends at the commit/tag/push; if a running binary is
+needed, say which change needs it and let the operator restart.
 
 ### Destructive commands — verify before you act
 
@@ -204,7 +205,7 @@ src/            index.js boots it; server.js the routes, api.js the operations; 
 web/            index.html, app.js and its modules; md.js, synapse.css, panel.css, vendor/
 skills/         shipped: visual-review, app-check, win-app, and the craft briefs
 tests/          node --test, one file per subject; run through scripts\checks.mjs
-scripts/        checks.mjs (the suite, Auto-Shutdown off); wait-for-idle.mjs
+scripts/        checks.mjs (the suite, Auto-Shutdown off)
 config/         synapse.config.json (this machine's answers); config.default.json ships
 data/           runtime state: engine home, browser profile, caches, pids
 logs/           one file per channel: app, engine, session, tools
