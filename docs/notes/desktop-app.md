@@ -92,7 +92,10 @@ replacement but allows a rename, so `shell\build.ps1` moves the running `Synapse
 to `Synapse.exe.old-<stamp>` and puts the new one at the root; the running window keeps
 the old image, and the next launch runs the new build. The browser host is published
 into `dist-host` and swapped the same way. The script never stops a process — the
-operator's next restart is the only thing that changes what is running.
+operator's next restart is the only thing that changes what is running. On that
+startup, `ServerHost.CleanOldBuilds()` removes the `Synapse.exe.old-*` files and
+`bin\browser-host.old-*` folders a previous launch left behind; anything still held by
+a dying process is left for the next launch.
 
 **The console is in the window.** `logger` mirrors the `app` channel and every warning
 or error to stdout; the shell captures that into `logs\console.log` and a ring buffer

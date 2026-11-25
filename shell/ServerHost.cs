@@ -149,6 +149,38 @@ public sealed class ServerHost : IDisposable
     }
 
     /// <summary>
+    /// Remove the build files a previous launch moved aside.
+    ///
+    /// Windows will not replace a running exe, so a build renames it to
+    /// `Synapse.exe.old-*` and puts the new one in its place. The old window keeps
+    /// the old image until it exits; after that the file is only litter. The same is
+    /// true of `bin\browser-host.old-*`. This runs at startup, before the new window
+    /// loads, and quietly leaves anything still held by a dying process for the next
+    /// launch.
+    /// </summary>
+    void CleanOldBuilds()
+    {
+        try
+        {
+            foreach (var file in Directory.GetFiles(_root, "Synapse.exe.old-*"))
+            {
+                try { File.Delete(file); } catch { /* still held; the next launch tries again */ }
+            }
+        }
+        catch { /* an unreadable root is not a reason to fail the start */ }
+
+        var bin = Path.Combine(_root, "bin");
+        try
+        {
+            foreach (var dir in Directory.GetDirectories(bin, "browser-host.old-*"))
+            {
+                try { Directory.Delete(dir, true); } catch { /* a host still holds it */ }
+            }
+        }
+        catch { /* no bin folder, or nothing to clean */ }
+    }
+
+    /// <summary>
     /// Take over a server a previous shell left running, instead of killing it.
     ///
     /// A force-killed window leaves the server and its engine alive. The old start
@@ -219,6 +251,7 @@ public sealed class ServerHost : IDisposable
             if (_child is { HasExited: false }) return;
         }
         _stopping = false;
+        CleanOldBuilds();
 
         // A window that was force-closed leaves the server alive. Adopt it before
         // the cleanup below, or the next launch kills the turn the operator is
