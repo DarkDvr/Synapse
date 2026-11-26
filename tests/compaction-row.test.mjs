@@ -14,22 +14,26 @@ import { state } from '../web/state.js';
 
 const read = (rel) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8');
 
-test('the compaction row is a tool-shaped yellow row, not a banner', () => {
-  const live = compactRow({ running: true, count: 2, size: 173000, limit: 205000 });
-  assert.match(live, /class="trace-line is-compact"/);
-  assert.match(live, /class="compact-dot is-live"/);
+test('the compaction is the ordinary tool card, with Synapse-yellow text', () => {
+  const live = compactRow({ id: 'c1', running: true, count: 2, size: 173000, limit: 205000 });
+  assert.match(live, /class="tool-card is-compact-card"/);
+  assert.match(live, /class="status-dot warn"/);
   assert.match(live, /Compacting ×2/);
   assert.match(live, /context at 173K\/205K/);
+  assert.match(live, /class="tool-state state-pill warn">running/);
   assert.doesNotMatch(live, /⏳/, 'the old banner glyph is gone');
-  const done = compactRow({ running: false, count: 2, size: 165000, limit: 205000 });
+  const done = compactRow({ id: 'c2', running: false, count: 2, size: 165000, limit: 205000, status: 'completed' });
   assert.match(done, /Compacted ×2/);
+  assert.match(done, /class="status-dot ok"/);
+  assert.match(done, /completed/);
   assert.doesNotMatch(done, /is-live/);
 });
 
-test('the transcript draws a compaction through the same row', () => {
+test('the transcript draws a compaction as that tool card', () => {
   state.messages = [{ type: 'compaction', id: 'c1', created: 1, raw: { status: 'running' } }];
   const html = renderMessage(state.messages[0]);
-  assert.match(html, /class="trace is-compact-post"/);
+  assert.match(html, /class="tool-card is-compact-card"/);
+  assert.match(html, /data-line="msg:c1"/);
   assert.match(html, /Compacting ×1/);
 });
 
@@ -41,9 +45,9 @@ test('compaction messages after the pane are moved into the pane post', () => {
   assert.match(js, /movedCompactions\.has\(m\)/, 'a moved message would be drawn twice');
 });
 
-test('the row is small, with no banner margins', () => {
+test('the card keeps the tool shape and the yellow tint', () => {
   const css = read('web/synapse.css');
-  assert.match(css, /\.trace-line\.is-compact \{[\s\S]*?font-size: calc\(var\(--chat-fs\) \* 0\.8\)/);
-  assert.match(css, /\.trace\.is-compact-post \{ margin: 0 0 5px; \}/);
-  assert.match(css, /\.compact-target \{/);
+  assert.match(css, /\.tool-card\.is-compact-card \.tool-name \{ color: var\(--yellow\); \}/);
+  assert.match(css, /\.tool-card\.is-compact-card \.tool-target \{ color: rgba\(237, 194, 90, 0\.72\); \}/);
+  assert.doesNotMatch(css, /\.trace-is-compact-post|\.trace\.is-compact-post/, 'no special vertical interruption');
 });

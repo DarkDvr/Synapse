@@ -65,7 +65,18 @@ function compactionLine(m, line = '') {
   // summary request instead of the history (measured 13 Nov: 882 tokens on a full window).
   // No number is better than a wrong one, so the line then says only that it happened.
   const size = summed && (!limit || summed <= limit) ? summed : 0;
-  return compactRow({ running, count: index, size, limit, line });
+  const key = `compact:${m.id || 'latest'}`;
+  return compactRow({
+    id: m.id || '',
+    running,
+    count: index,
+    size,
+    limit,
+    status: String(m.raw?.status || ''),
+    error: String(m.error || m.raw?.error?.message || ''),
+    open: state.open.has(key),
+    line,
+  });
 }
 
 // ── transcript ──────────────────────────────────────────────────
@@ -635,8 +646,9 @@ export function renderMessage(m, tail = '', downloads = [], remove = false) {
     </div></div>`;
   }
   if (m.type === 'compaction') {
-    return `<div class="trace is-compact-post${taken}"${line}${takenAttr} data-msg="synapse"><div class="trace-lines">` +
-      `${compactionLine(m)}</div></div>`;
+    // A compaction is just another tool call in the conversation. Its own row owns
+    // the line marker; there is no extra trace wrapper or vertical interruption.
+    return compactionLine(m, `${line}${takenAttr}`);
   }
   if (m.type === 'assistant') {
     const body = [`${stamp}<span class="msg-role">Architect</span>`];

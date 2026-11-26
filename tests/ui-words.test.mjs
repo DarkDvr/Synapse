@@ -687,7 +687,7 @@ contract('a refusal the operator opened stays open when the chat renders again',
 
 // A compaction is part of the conversation: the context dropped, and the chat has to
 // say why. A cancelled one is the exception — the chip and the toast already said so.
-contract('a compaction is a line in the chat, in the trace format Multi uses', async () => {
+contract('a compaction is another tool card in the conversation', async () => {
   const { renderMessage } = await import('../web/transcript.js');
   const { state } = await import('../web/state.js');
   state.messages = [{ id: 'a1', type: 'assistant', created: 1000, raw: { tokens: { input: 160000, cache: { read: 7193 } } } }];
@@ -698,19 +698,15 @@ contract('a compaction is a line in the chat, in the trace format Multi uses', a
     completed: false,
     raw: { status: 'completed', tokens: { input: 167193, output: 2338 } },
   });
-  assert.match(done, /class="trace-line is-compact"/, 'the run trace\'s own line, not a harness block');
+  assert.match(done, /class="tool-card is-compact-card"/, 'the ordinary tool card, not a harness block');
   assert.match(done, /Compacted ×1/, 'the count, as Multi prints it');
   assert.match(done, /context at 167K/, 'and the size when it can be true');
-  // The post's own name, and a whole tag: the compaction's sentence used to be the
-  // variable `line`, which the slide's attribute took over — the tag was left as
-  // `class="trace"Compacted ×1`. A pattern that only looked for the sentence still
-  // passed, so this asks for the attribute after the class (20 Nov).
-  assert.match(done, /class="trace is-compact-post"\s+data-line="msg:c1"/, 'the post lost its name, or the tag is broken');
+  assert.match(done, /data-line="msg:c1"/, 'the post kept its slide name');
+  assert.match(done, /data-tool-card="compact:c1"/, 'the card has a fold');
   // The transcript holds the first one by the time the second is written — that is what
-  // makes it the second, and the count is the chat´s, not this render´s.
+  // makes it the second, and the count is the chat's, not this render's.
   state.messages.push({ id: 'c1', type: 'compaction', created: 2000, raw: { status: 'completed', tokens: {} } });
   const running = renderMessage({ id: 'c2', type: 'compaction', created: 3000, completed: false, raw: { status: 'running', tokens: {} } });
-  assert.match(running, /Compacting ×2/, 'the second one, and in the present tense');
   assert.match(running, /Compacting ×2/, 'the second one, and in the present tense');
 });
 
