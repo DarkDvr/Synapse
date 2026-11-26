@@ -1,5 +1,5 @@
-// The delete chip and what it marks: only the last exchange, only while the chat is
-// idle, and only after the server has said the boundary is clean.
+// The delete control and what it marks: only the last exchange, only while the chat
+// is idle, and only after the server has said the boundary is clean.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { installPage } from './fake-page.mjs';
@@ -8,8 +8,13 @@ installPage();
 const { state } = await import('../web/state.js');
 const { renderTranscript, transcriptWiring } = await import('../web/transcript.js');
 const { chatScrollWiring } = await import('../web/chat-scroll.js');
-const { renderRemoveChip, previewRemoveExchange, endRemovePreview, removeExchangeClick, resetRemoveExchange } =
-  await import('../web/remove-exchange.js');
+const {
+  removeButtonHtml,
+  previewRemoveExchange,
+  endRemovePreview,
+  removeExchangeClick,
+  resetRemoveExchange,
+} = await import('../web/remove-exchange.js');
 
 chatScrollWiring({
   renderTranscript,
@@ -59,19 +64,26 @@ function reset({ mode = 'single', busy = false, available = true } = {}) {
   return page;
 }
 
-test('only the last prompt and its answer are marked', () => {
+test('the button is in the last message header, left of Reuse', () => {
   const page = reset();
   renderTranscript();
   const html = page.el('transcript').innerHTML;
   assert.equal((html.match(/data-remove-target="1"/g) || []).length, 2);
-  assert.match(html, /Second/);
-  assert.match(html, /Two/);
-  const btn = page.el('removeChip');
-  assert.equal(btn.hidden, false);
-  assert.equal(btn.textContent, 'Remove Exchange');
+  assert.equal((html.match(/data-remove-msg=/g) || []).length, 1);
+  assert.match(html, /data-remove-msg="u2"/);
+  assert.doesNotMatch(html, /data-remove-msg="u1"/);
+  const removeAt = html.indexOf('data-remove-msg="u2"');
+  const reuseAt = html.indexOf('data-reuse-msg="u2"');
+  assert.ok(removeAt >= 0 && removeAt < reuseAt, 'Remove sits before Reuse');
 });
 
-test('hover previews only the posts that would go', () => {
+test('the button refuses to render for an earlier message', () => {
+  reset();
+  assert.equal(removeButtonHtml({ id: 'u1', type: 'user' }, true), '');
+  assert.match(removeButtonHtml({ id: 'u2', type: 'user' }, true), /data-remove-msg="u2"/);
+});
+
+test('hover previews the posts in red', () => {
   const page = reset();
   renderTranscript();
   previewRemoveExchange();
@@ -80,29 +92,29 @@ test('hover previews only the posts that would go', () => {
   assert.equal(page.el('transcript').classList.contains('is-remove-preview'), false);
 });
 
-test('a first click asks; reset puts the chip back', () => {
+test('a first click asks; reset returns the button to idle', () => {
   const page = reset();
   renderTranscript();
   removeExchangeClick();
-  assert.equal(page.el('removeChip').textContent, 'Remove Exchange?');
-  assert.equal(page.el('removeChip').classList.contains('is-confirm'), true);
+  state.renderSig = '';
+  renderTranscript();
+  const asked = page.el('transcript').innerHTML;
+  assert.match(asked, /Remove Exchange\?/);
+  assert.match(asked, /is-confirm/);
   assert.equal(page.el('transcript').classList.contains('is-remove-confirm'), true);
   resetRemoveExchange();
-  assert.equal(page.el('removeChip').classList.contains('is-confirm'), false);
+  state.renderSig = '';
+  renderTranscript();
+  const idle = page.el('transcript').innerHTML;
+  assert.match(idle, /Remove Exchange/);
+  assert.doesNotMatch(idle, /Remove Exchange\?/);
   assert.equal(page.el('transcript').classList.contains('is-remove-confirm'), false);
 });
 
-test('busy, Multi and an unavailable boundary hide the chip', () => {
-  let page = reset({ busy: true });
-  renderTranscript();
-  assert.equal(page.el('removeChip').hidden, true);
-
-  page = reset({ mode: 'multi' });
-  renderTranscript();
-  assert.equal(page.el('removeChip').hidden, true);
-
-  page = reset({ available: false });
-  renderTranscript();
-  assert.equal(page.el('removeChip').hidden, true);
-  assert.doesNotMatch(page.el('transcript').innerHTML, /data-remove-target/);
+test('busy, Multi and an unavailable boundary hide the button', () => {
+  for (const options of [{ busy: true }, { mode: 'multi' }, { available: false }]) {
+    const page = reset(options);
+    renderTranscript();
+    assert.doesNotMatch(page.el('transcript').innerHTML, /data-remove-msg/);
+  }
 });

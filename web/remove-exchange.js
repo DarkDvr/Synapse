@@ -1,12 +1,14 @@
 // Remove the last exchange: the operator's last prompt and the answer to it.
 //
 // There is exactly one deletion, and it is a suffix: the engine's revert boundary
-// takes the last operator message and everything after it. The chip is quiet and
-// appears only when the server says the last exchange is a clean one; hovering it
-// tints the posts that would go, and a second click within three seconds commits.
+// takes the last operator message and everything after it. The button sits in the
+// last message's own header, left of Reuse, and appears only when the server says
+// the last exchange is a clean one; hovering it tints the posts red, and a second
+// click within three seconds commits.
 // The files, the plan and every worker session stay.
 import { state } from './state.js';
 import { $ } from './dom.js';
+import { esc } from './format.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
 import { chatAtBottom, scrollChatToBottom } from './chat-scroll.js';
@@ -55,39 +57,57 @@ function setHighlight(which) {
   box.classList.toggle('is-remove-confirm', which === 'confirm');
 }
 
-/** Draw the chip from the page's own state. Called by the transcript and the composer. */
+/** The delete control, in the header of the one post it can remove. */
+export function removeButtonHtml(message, remove) {
+  if (!remove || message?.type !== 'user' || !state.removeInfo?.available || !ready()) return '';
+  const id = String(message.id || '');
+  if (!id || id !== state.removeInfo.messageID) return '';
+  const confirming = Date.now() < confirmUntil;
+  return `<button type="button" class="msg-remove${confirming ? ' is-confirm' : ''}"` +
+    ` data-remove-msg="${esc(id)}" title="${confirming
+      ? 'Click again to remove your last message and its response. The files, the plan and any worker work stay.'
+      : 'Remove your last message and its response from this chat. The files, the plan and any worker work stay.'}"` +
+    ` aria-label="${confirming ? 'Confirm removing the last exchange' : 'Remove the last exchange'}">` +
+    `${confirming ? 'Remove Exchange?' : 'Remove Exchange'}</button>`;
+}
+
+/** Update the one in-post button when the page's state changes under it. */
 export function renderRemoveChip() {
-  const btn = $('removeChip');
-  if (!btn) return;
+  const buttons = [...document.querySelectorAll('#transcript [data-remove-msg]')];
+  if (!buttons.length) return;
   if (busy) {
-    btn.hidden = false;
-    btn.disabled = true;
-    btn.classList.add('is-confirm');
-    btn.textContent = 'Removing…';
-    btn.title = 'The exchange is being removed. The files and the plan stay.';
-    btn.setAttribute('aria-label', 'Removing the last exchange');
+    for (const btn of buttons) {
+      btn.hidden = false;
+      btn.disabled = true;
+      btn.classList.add('is-confirm');
+      btn.textContent = 'Removing…';
+      btn.title = 'The exchange is being removed. The files and the plan stay.';
+      btn.setAttribute('aria-label', 'Removing the last exchange');
+    }
     return;
   }
   if (!ready()) {
-    btn.hidden = true;
-    btn.disabled = false;
-    btn.classList.remove('is-confirm');
-    btn.textContent = '';
-    btn.title = '';
+    for (const btn of buttons) {
+      btn.hidden = true;
+      btn.disabled = false;
+      btn.classList.remove('is-confirm');
+    }
     confirmUntil = 0;
     clearTimeout(confirmTimer);
     setHighlight(null);
     return;
   }
   const confirming = Date.now() < confirmUntil;
-  btn.hidden = false;
-  btn.disabled = false;
-  btn.classList.toggle('is-confirm', confirming);
-  btn.textContent = confirming ? 'Remove Exchange?' : 'Remove Exchange';
-  btn.title = confirming
-    ? 'Click again to remove your last message and its response. The files, the plan and any worker work stay.'
-    : 'Remove your last message and its response from this chat. The files, the plan and any worker work stay.';
-  btn.setAttribute('aria-label', confirming ? 'Confirm removing the last exchange' : 'Remove the last exchange');
+  for (const btn of buttons) {
+    btn.hidden = false;
+    btn.disabled = false;
+    btn.classList.toggle('is-confirm', confirming);
+    btn.textContent = confirming ? 'Remove Exchange?' : 'Remove Exchange';
+    btn.title = confirming
+      ? 'Click again to remove your last message and its response. The files, the plan and any worker work stay.'
+      : 'Remove your last message and its response from this chat. The files, the plan and any worker work stay.';
+    btn.setAttribute('aria-label', confirming ? 'Confirm removing the last exchange' : 'Remove the last exchange');
+  }
 }
 
 /** The first look: show exactly what the delete would take. */

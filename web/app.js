@@ -2261,10 +2261,17 @@ function wire() {
   // A picture a model put in its answer: the chip is the sentence, the picture
   // is what hovering it shows. Delegated, because the transcript re-renders.
   $('transcript')?.addEventListener('mouseover', (e) => {
+    const remove = e.target.closest?.('[data-remove-msg]');
+    if (remove) { previewRemoveExchange(); return; }
     const chip = e.target.closest('.chat-image');
     if (chip) showChatImagePreview(chip);
   });
   $('transcript')?.addEventListener('mouseout', (e) => {
+    const remove = e.target.closest?.('[data-remove-msg]');
+    if (remove) {
+      if (!remove.contains(e.relatedTarget)) endRemovePreview();
+      return;
+    }
     const chip = e.target.closest('.chat-image');
     if (chip && !chip.contains(e.relatedTarget)) hideAttachPreview();
   });
@@ -2272,11 +2279,6 @@ function wire() {
   $('deskTakeBack')?.addEventListener('click', takeBackScreen);
   $('modeToggle').addEventListener('click', switchMode);
   $('compactChip').addEventListener('click', compactClick);
-  // The one deletion: hover shows what would go, a first click asks, the second
-  // removes. The button is hidden unless the server says the last exchange is clean.
-  $('removeChip').addEventListener('click', removeExchangeClick);
-  $('removeChip').addEventListener('mouseenter', previewRemoveExchange);
-  $('removeChip').addEventListener('mouseleave', endRemovePreview);
   // The Compact action on a persona mode note: the ordinary compaction flow, after
   // one confirm. It is a recommendation the operator can ignore.
   document.addEventListener('click', async (e) => {
@@ -2389,6 +2391,11 @@ document.addEventListener('keydown', (e) => {
     else scrollChatToBottom();
   });
   $('transcript').addEventListener('click', async (e) => {
+    const remove = e.target.closest?.('[data-remove-msg]');
+    if (remove) {
+      removeExchangeClick();
+      return;
+    }
     const reuse = e.target.closest('[data-reuse-msg]');
     if (reuse) {
       reuseMessage(reuse.dataset.reuseMsg);

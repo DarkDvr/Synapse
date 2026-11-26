@@ -24,7 +24,7 @@ import { currentProject, roleLabel, groupTurns, currentForm } from './run-view.j
 import { renderTrace, tracesFor, traceSig, renderSessionStream } from './traces.js';
 import { downloadCard, downloadsForProject, downloadsInWindow } from './downloads.js';
 import { compactRow } from './compact-row.js';
-import { renderRemoveChip } from './remove-exchange.js';
+import { renderRemoveChip, removeButtonHtml } from './remove-exchange.js';
 
 const missing = (name) => () => {
   throw new Error(`transcript.js: ${name} was not wired at boot`);
@@ -560,6 +560,7 @@ export function renderMessage(m, tail = '', extras = '', remove = false) {
              <path d="M3 5.4A5.2 5.2 0 1 1 3 10.6"/><path d="M3 2.6v3.2h3.2"/>
            </svg><span>Reuse</span></button>`
       : '';
+    const removeButton = removeButtonHtml(m, remove);
     // A steer is the operator speaking while the turn runs. The engine keeps the
     // marker so the model knows what it is; the operator sees the same purple
     // "You" with a yellow STEER: prefix, so the difference is visible at a glance.
@@ -576,7 +577,7 @@ export function renderMessage(m, tail = '', extras = '', remove = false) {
     // put "You" and the sentence on one baseline, which was a vertical-alignment
     // problem with no right answer at every chat size (26 Nov).
     return `<div class="msg user${steer ? ' is-steer' : ''}${pending}${taken}"${line}${takenAttr} data-msg="user"><div class="msg-body">
-      <div class="msg-head"><span class="msg-role">You</span><span class="msg-head-right">${reuse}${stamp}</span></div>
+      <div class="msg-head"><span class="msg-role">You</span><span class="msg-head-right">${removeButton}${reuse}${stamp}</span></div>
       <div class="msg-text">${lead}${esc(said)}</div>${chips}
     </div></div>`;
   }
