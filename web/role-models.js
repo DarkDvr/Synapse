@@ -20,6 +20,7 @@ import { renderTranscript } from './transcript.js';
 import { pickers, syncPickerInput } from './model-picker.js';
 import { clearRoleRate } from './role-rate-store.js';
 import { loadPersona, savePersona, PERSONA_MAX_NAME, PERSONA_MAX_TEXT } from './persona.js';
+import { visibleSkills } from './skill-list.js';
 
 const missing = (name) => () => {
   throw new Error(`role-models.js: ${name} was not wired at boot`);
@@ -203,15 +204,15 @@ export async function editRoleSettings(roleId) {
   // Single uses the same card dialog as Multi; only the instruction box changes
   // its meaning. Skills stay the role's skills in both modes.
   const entry = isPersona ? { ...base, instructions: persona?.instructions || '' } : base;
-  let installed = [];
+  let available = [];
   try {
-    installed = (await api('GET', '/api/skills')).skills || [];
+    available = visibleSkills((await api('GET', '/api/skills')).skills || []);
   } catch (err) {
     toast('Could Not Read the Skills', err.message);
     return;
   }
-  const allowed = Array.isArray(entry.skills) ? entry.skills : installed.map((s) => s.name);
-  if (!installed.length) {
+  const allowed = Array.isArray(entry.skills) ? entry.skills : available.map((s) => s.name);
+  if (!available.length) {
     toast('No Skills Available', 'Synapse found no skills in its own folder or yours — see Settings → Tools.');
     return;
   }
@@ -239,7 +240,7 @@ export async function editRoleSettings(roleId) {
     name: 'skills',
     type: 'skills',
     label: 'Skills — tick to allow, “Required” to make the brief demand it',
-    options: installed
+    options: available
       .map((s) => ({ v: s.name, l: s.name, hint: s.description }))
       .concat(
         missingHere.map((m) => ({
@@ -329,11 +330,10 @@ export async function editRoleSettings(roleId) {
   const draft = JSON.parse(JSON.stringify(state.config || {}));
   draft.roles = { ...(draft.roles || {}) };
   const next = { ...(draft.roles[roleId] || {}) };
-  // Ticking everything means "no restriction", which is exactly what an absent
-  // list says — and it lets a skill added next month reach this role without the
-  // operator coming back to tick it.
-  if (result.skills.length === installed.length) delete next.skills;
-  else next.skills = result.skills;
+  // Store the visible list even when every box is ticked. An absent list means "no
+  // restriction", which would also let the engine's hidden desktop skills through —
+  // the ones this dialog no longer offers because their tools do not exist here.
+  next.skills = result.skills;
   // Required is a subset of allowed, always.
   const mustLoad = (result.mustLoad || []).filter((s) => result.skills.includes(s));
   if (mustLoad.length) next.mustLoad = mustLoad;

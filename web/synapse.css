@@ -1222,6 +1222,45 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 .compact-chip[disabled] { opacity: 0.7; cursor: default; }
 .compact-chip[hidden] { display: none; }
 
+/* The last exchange can be removed, and only the last exchange. The chip is quiet
+   until looked at — a red button permanently in the corner would read as a warning
+   about the chat rather than an offer. Hovering it tints the posts that would go;
+   the confirmation is the same red Compact wears, because both throw work away. */
+.remove-chip {
+  flex: 0 1 auto; min-width: 0; height: 25px; box-sizing: border-box;
+  display: inline-flex; align-items: center; gap: 6px;
+  max-width: 180px;
+  padding: 0 10px; border-radius: 999px;
+  border: 1px solid #353941;
+  background: rgba(20, 22, 27, 0.88);
+  color: #8b8f97;
+  font-family: var(--mono); font-size: 10px; line-height: 1.2;
+  letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(3px); opacity: 0.72;
+  transition: color 120ms, border-color 120ms, background 120ms, opacity 120ms;
+}
+.remove-chip:hover:not(:disabled), .remove-chip:focus-visible {
+  opacity: 1; color: #ff8a78; border-color: var(--red);
+  outline: none;
+}
+.remove-chip.is-confirm {
+  opacity: 1; border-color: var(--red); color: var(--red);
+  background: rgba(34, 20, 20, 0.92);
+}
+.remove-chip[disabled] { opacity: 0.8; cursor: default; }
+.remove-chip[hidden] { display: none; }
+#transcript.is-remove-preview .is-remove-target,
+#transcript.is-remove-confirm .is-remove-target {
+  border-radius: 4px;
+  transition: background 120ms ease-out;
+}
+#transcript.is-remove-preview .is-remove-target { background: rgba(237, 194, 90, 0.055); }
+#transcript.is-remove-confirm .is-remove-target {
+  background: rgba(240, 86, 63, 0.11);
+  box-shadow: inset 2px 0 0 rgba(240, 86, 63, 0.7);
+}
+
 /* The post a compact leaves at the top of the fresh chat. It is not a message:
    no avatar, no speaker, an amber rule down the left — the same "news" colour a
    compaction line uses. Collapsed to one line; the summary is behind it. */

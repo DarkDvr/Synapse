@@ -19,6 +19,7 @@ import { currentProject, currentRun, roleLabel, currentForm, selectionFor, model
 import { renderTranscript, attachmentImage } from './transcript.js';
 import { traceOf, steerLine } from './traces.js';
 import { clearModeNote } from './mode-note.js';
+import { renderRemoveChip } from './remove-exchange.js';
 
 const missing = (name) => () => {
   throw new Error(`composer.js: ${name} was not wired at boot`);
@@ -136,6 +137,7 @@ export function renderComposer() {
   if (!composerAcceptsFiles()) hideDropHint();
   renderStopState();
   wired.renderCompactChip();
+  renderRemoveChip();
 }
 
 export async function send() {

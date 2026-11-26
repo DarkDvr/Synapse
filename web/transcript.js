@@ -24,6 +24,7 @@ import { currentProject, roleLabel, groupTurns, currentForm } from './run-view.j
 import { renderTrace, tracesFor, traceSig, renderSessionStream } from './traces.js';
 import { downloadCard, downloadsForProject, downloadsInWindow } from './downloads.js';
 import { compactRow } from './compact-row.js';
+import { renderRemoveChip } from './remove-exchange.js';
 
 const missing = (name) => () => {
   throw new Error(`transcript.js: ${name} was not wired at boot`);
@@ -297,6 +298,9 @@ export function renderTranscript() {
   // The Architect's card shows what its own turn is doing, read from this same
   // transcript, so it is refreshed wherever the transcript is.
   wired.renderRoleActivity();
+  // The delete chip is about this transcript's last exchange, and its availability
+  // arrives with the messages. It is hidden while anything is live.
+  renderRemoveChip();
   // Only the conversation itself is shown: user turns, assistant turns, and the
   // harness speaking (a worker's report being handed back). Anything else the
   // engine reports (system prompts, scaffolding, context dumps) is not chat and
@@ -331,6 +335,12 @@ export function renderTranscript() {
     })
     .map((m) => (m.parts ? { ...m, parts: m.parts.map((p, i) => ({ ...p, _k: `${m.id}:${i}` })) } : m));
   const showable = groupTurns(tagged, { breakBefore: alarmBreaks(tagged, refusals) });
+  // The posts the delete chip would take: the last operator prompt and every post
+  // after it. The server names the boundary, so the page never guesses which user
+  // message is the last exchange.
+  const removeFrom = state.removeInfo?.available
+    ? showable.reduce((at, m, i) => (m.type === 'user' && m.id === state.removeInfo.messageID ? i : at), -1)
+    : -1;
   // Only permissions stay in the transcript: a form is answered in the panel
   // over the chat, and a card here would both duplicate it and change the
   // transcript's height the moment it appeared.
@@ -460,7 +470,7 @@ export function renderTranscript() {
         extras = mine.map(downloadCard).join('');
       }
     }
-    if (!movedCompactions.has(m)) html += renderMessage(m, i === paneAt ? paneTail : '', extras);
+    if (!movedCompactions.has(m)) html += renderMessage(m, i === paneAt ? paneTail : '', extras, removeFrom >= 0 && i >= removeFrom);
   }
   while (next < items.length) html += items[next++].html;
   if (liveTail && paneAt === -1) html += liveTail;
@@ -503,19 +513,23 @@ export function renderTranscript() {
 }
 
 // The role label shares the first line with the text; the time rides the right.
-export function renderMessage(m, tail = '', extras = '') {
+export function renderMessage(m, tail = '', extras = '', remove = false) {
   const t = hhmm(m.created);
   const stamp = t ? `<span class="msg-time">${t}</span>` : '';
   // The name this post travels under while it slides in. Every message the page draws
   // has an id — the engine's, or the `local-` one an echo carries until the reload.
   const line = m.id ? ` data-line="msg:${esc(m.id)}"` : '';
+  // The delete chip highlights the posts it would remove; this is the only hook the
+  // hover and confirmation need.
+  const taken = remove ? ' is-remove-target' : '';
+  const takenAttr = remove ? ' data-remove-target="1"' : '';
 
   // A harness steer is a real user-role turn — the engine has no synthetic role for a
   // mid-turn prompt — but it is Synapse speaking, not the operator. Draw it with the
   // standard harness post, never as "You" (22 Nov).
   if (m.type === 'user' && /^\s*\[harness\]/i.test(String(m.text || ''))) {
     const body = String(m.text || '').replace(/^\s*\[harness\]\s*/i, '');
-    return `<div class="msg harness"${line} data-msg="synapse"><div class="msg-body">
+    return `<div class="msg harness${taken}"${line}${takenAttr} data-msg="synapse"><div class="msg-body">
       ${stamp}<span class="msg-role">Synapse · harness</span>
       <div class="msg-answer">${renderMarkdown(body)}</div>
     </div></div>`;
@@ -561,7 +575,7 @@ export function renderMessage(m, tail = '', extras = '') {
     // The speaker is its own line, the way Architect and Synapse are. The old row
     // put "You" and the sentence on one baseline, which was a vertical-alignment
     // problem with no right answer at every chat size (26 Nov).
-    return `<div class="msg user${steer ? ' is-steer' : ''}${pending}"${line} data-msg="user"><div class="msg-body">
+    return `<div class="msg user${steer ? ' is-steer' : ''}${pending}${taken}"${line}${takenAttr} data-msg="user"><div class="msg-body">
       <div class="msg-head"><span class="msg-role">You</span><span class="msg-head-right">${reuse}${stamp}</span></div>
       <div class="msg-text">${lead}${esc(said)}</div>${chips}
     </div></div>`;
@@ -594,7 +608,7 @@ export function renderMessage(m, tail = '', extras = '') {
       const full = String(/^instructions from:\s*(.*)$/i.exec(head)?.[1] || '').trim();
       const short = full.split(/[\\/]/).filter(Boolean).slice(-2).join('\\') || full;
       const key = `loaded:${m.id}`;
-      return `<div class="msg harness"${line} data-msg="synapse"><div class="msg-body">
+      return `<div class="msg harness${taken}"${line}${takenAttr} data-msg="synapse"><div class="msg-body">
         ${stamp}<span class="msg-role">Synapse · ${label}</span>
         <details class="chat-post" data-k="${esc(key)}"${state.open.has(key) ? ' open' : ''}>
           <summary><span class="chat-post-note" title="${esc(full)}">Instructions from ${esc(short)}</span></summary>
@@ -609,7 +623,7 @@ export function renderMessage(m, tail = '', extras = '') {
     if (prohibited) {
       const key = `refused:${m.id}`;
       const sentence = String(body || '').split(/\r?\n/).map((l) => l.trim()).find(Boolean) || '';
-      return `<div class="${cls}"${line} data-msg="synapse"><div class="msg-body">
+      return `<div class="${cls}${taken}"${line}${takenAttr} data-msg="synapse"><div class="msg-body">
         ${stamp}<span class="msg-role">Synapse</span>
         <details class="chat-post is-refusal" data-k="${esc(key)}"${state.open.has(key) ? ' open' : ''}>
           <summary title="${esc(sentence)}"><span class="chat-post-note">⛔ PROHIBITED · the protected list refused this change</span></summary>
@@ -617,13 +631,13 @@ export function renderMessage(m, tail = '', extras = '') {
         </details>
       </div></div>`;
     }
-    return `<div class="${cls}"${line} data-msg="synapse"><div class="msg-body">
+    return `<div class="${cls}${taken}"${line}${takenAttr} data-msg="synapse"><div class="msg-body">
       ${stamp}<span class="msg-role">Synapse · ${label}</span>
       <div class="msg-answer">${renderMarkdown(body)}</div>
     </div></div>`;
   }
   if (m.type === 'compaction') {
-    return `<div class="trace is-compact-post"${line} data-msg="synapse"><div class="trace-lines">` +
+    return `<div class="trace is-compact-post${taken}"${line}${takenAttr} data-msg="synapse"><div class="trace-lines">` +
       `${compactionLine(m)}</div></div>`;
   }
   if (m.type === 'assistant') {
@@ -729,12 +743,12 @@ export function renderMessage(m, tail = '', extras = '') {
     // an extra after it. It was drawn below the thinking pane, which is the one place
     // nothing goes (the operator's rule); the card itself is already a tool card.
     if (extras) body.splice(1, 0, extras);
-    return `<div class="msg assistant"${line} data-msg="assistant"><div class="msg-body">${body.join('')}${tail}</div></div>`;
+    return `<div class="msg assistant${taken}"${line}${takenAttr} data-msg="assistant"><div class="msg-body">${body.join('')}${tail}</div></div>`;
   }
   const body = m.error
     ? `<div class="msg-error">${esc(m.error)}</div>`
     : `<span class="msg-text">${esc(m.text)}</span>`;
-  return `<div class="msg"${line}><div class="msg-body">${stamp}<span class="msg-role">${esc(m.type)}</span>${body}</div></div>`;
+  return `<div class="msg${taken}"${line}${takenAttr}><div class="msg-body">${stamp}<span class="msg-role">${esc(m.type)}</span>${body}</div></div>`;
 }
 
 let toolSeq = 0;

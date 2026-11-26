@@ -26,6 +26,10 @@ export const state = {
   projects: [],
   sessionId: null,
   messages: [],
+  // Whether the server would allow removing the last exchange, and where its
+  // boundary is. It arrives with the transcript; the server checks again when the
+  // operator confirms.
+  removeInfo: null,
   // The open session's project plan file: its parsed contents, any problems in
   // it, and when it last changed.
   planState: null,

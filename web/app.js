@@ -185,6 +185,13 @@ import {
 } from './run-menu.js';
 import { renderMode, sessionMode, chatBody, answerWaitSec, SINGLE_PERMISSIONS } from './mode.js';
 import { compactPostOf, renderCompactChip, compactClick, runCompact, compactWiring } from './compact.js';
+import {
+  removeExchangeWiring,
+  resetRemoveExchange,
+  previewRemoveExchange,
+  endRemovePreview,
+  removeExchangeClick,
+} from './remove-exchange.js';
 import { renderEffort, fillRoleModels, editRoleSettings, setRoleModel, cycleEffort, roleModelsWiring } from './role-models.js';
 import {
   openProjectMenu,
@@ -877,7 +884,9 @@ async function openSession(id, { keepDraft = false } = {}) {
   // cache and timer on its Architect card (21 Nov).
   state.messages = [];
   state.archCtx = null;
+  state.removeInfo = null;
   state.lease = null;
+  resetRemoveExchange();
   // The waiting line and the persona card belong to the chat/project they were
   // read for: clear them before the new fetch can paint a frame of the old one.
   endWait();
@@ -1143,6 +1152,8 @@ function showNothing() {
   state.view = 'none';
   state.sessionId = null;
   state.messages = [];
+  state.removeInfo = null;
+  resetRemoveExchange();
   state.planState = null;
   state.clocks = null;
   state.automation = { ...AUTOMATION_DEFAULTS };
@@ -1231,8 +1242,10 @@ async function loadMessages() {
   /** Is this answer still the one the page is waiting for? */
   const current = () => state.sessionId === id && asked === messagesAsked;
   try {
-    const loaded = (await api('GET', `/api/sessions/${encodeURIComponent(id)}/messages`)).messages;
+    const answer = await api('GET', `/api/sessions/${encodeURIComponent(id)}/messages`);
     if (!current()) return;
+    const loaded = answer.messages;
+    state.removeInfo = answer.remove || null;
     // A steer this page painted the moment it was sent is not in the engine's
     // transcript until the model has read it. Dropping it here made the operator's
     // own sentence vanish for minutes - the "no confirmation" they reported
@@ -2259,6 +2272,11 @@ function wire() {
   $('deskTakeBack')?.addEventListener('click', takeBackScreen);
   $('modeToggle').addEventListener('click', switchMode);
   $('compactChip').addEventListener('click', compactClick);
+  // The one deletion: hover shows what would go, a first click asks, the second
+  // removes. The button is hidden unless the server says the last exchange is clean.
+  $('removeChip').addEventListener('click', removeExchangeClick);
+  $('removeChip').addEventListener('mouseenter', previewRemoveExchange);
+  $('removeChip').addEventListener('mouseleave', endRemovePreview);
   // The Compact action on a persona mode note: the ordinary compaction flow, after
   // one confirm. It is a recommendation the operator can ignore.
   document.addEventListener('click', async (e) => {
@@ -3081,6 +3099,7 @@ async function bootPage() {
   // The compact chip opens the new chat; the role cards ask for their labels, the
   // settings dialog and the cards' activity.
   compactWiring({ openSession });
+  removeExchangeWiring({ loadMessages });
   roleModelsWiring({ modelLabel, modelTitle, openDialog, renderRoleActivity });
   // The project menu asks for the dialog, opening a chat, the empty view and the slug.
   projectMenuWiring({ openDialog, openSession, showNothing, slug });

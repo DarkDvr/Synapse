@@ -235,6 +235,10 @@
             <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="false"></div>
             <div class="chat-scroll" id="transcript"></div>
             <div class="chat-tools">
+              <!-- The one deletion: the last exchange, and only while the chat is
+                   idle. Hovering it tints the posts that would go; a second click
+                   within three seconds is the confirmation. -->
+              <button class="remove-chip" id="removeChip" type="button" hidden></button>
               <!-- The only reset: discards this conversation and leaves a handover.
                    Hidden unless the project is idle with something to discard, and
                    a second click within three seconds is the confirmation. It sits

@@ -5,6 +5,7 @@
 // The tab ids here are the keys of the pane map at the bottom, and app.js adds the
 // one pane that is not here: Providers, which is a real editor with its own state.
 import { state } from './state.js';
+import { visibleSkills } from './skill-list.js';
 import { esc } from './format.js';
 import { readPath } from './settings-data.js';
 import { setField, setSlider, setSelect, setCheck, setGroup } from './settings-form.js';
@@ -43,7 +44,7 @@ export function panesWiring(fns) {
 function skillsSummary() {
   const info = state.skillsInfo;
   if (!info) return 'Skills have not been read yet.';
-  const total = (info.skills || []).length;
+  const total = visibleSkills(info.skills).length;
   const missing = (info.missing || []).map((m) => `${m.name} (${m.roles.join(', ')})`);
   const gone = (info.paths || []).filter((p) => !p.exists).map((p) => p.path);
   const dupeNames = [...new Set((info.paths || []).flatMap((p) => p.duplicates || []))];

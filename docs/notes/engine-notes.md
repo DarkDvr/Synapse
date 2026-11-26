@@ -21,6 +21,9 @@ The schema dump is a starting point, not the truth; the running engine is.
 | `GET /api/pending` | pending forms, and `canStop` for the open session's project. |
 | `DELETE /api/debug/location?location[directory]=<dir>` | a **deepObject** (`location%5Bdirectory%5D=…`, else 400 `Expected object`) and **asynchronous**. |
 | `POST /api/session/{id}/compact` | queued at the next step boundary, so from an idle chat it runs now. |
+| `POST /api/session/{id}/revert/stage` + `/revert/commit` | a **suffix boundary**: commit deletes that message and every later one, plus inbox entries at/after it. `{messageID, files:false}` leaves the files alone. |
+
+**The one deletion is a suffix.** The engine has no "delete this message": it has a revert boundary. Staging the last operator prompt and committing removes that prompt and everything after it. `files:false` is not optional for Synapse's use — this is a conversation edit, and the turn's files, plan and worker sessions stay. A boundary in the middle would take every later message with it, so the UI offers only the newest exchange, only in Single mode, and only when nothing is live or waiting. See `src/session-remove.js`.
 
 **A form dies with the engine.** `question` opens a form the engine holds in memory: on 21 Oct a form was
 waiting, `GET /api/pending` came back empty, and the card still read **running** — a state that can never

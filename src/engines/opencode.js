@@ -636,6 +636,10 @@ export class OpenCodeEngine extends Engine {
       .map((s) => ({
         name: String(s?.name || s?.id || '').trim(),
         description: String(s?.description || '').trim(),
+        // The engine's own skills live inside its binary (`skill://browser/…`).
+        // They describe the OpenCode desktop app; Synapse has its own toolset, so
+        // the role picker does not offer them.
+        builtin: String(s?.path || '').startsWith('skill://'),
       }))
       .filter((s) => s.name)
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -816,6 +820,31 @@ export class OpenCodeEngine extends Engine {
     return messages;
   }
 
+  /**
+   * The engine's own undo boundary. Staging records where the conversation would
+   * be cut; committing deletes that message and every one after it. `files: false`
+   * is deliberate: Synapse removes the exchange from the chat, never the files the
+   * turn wrote.
+   */
+  async stageRevert(sessionId, messageID) {
+    return this.request(
+      'POST',
+      `/api/session/${encodeURIComponent(sessionId)}/revert/stage`,
+      { messageID: String(messageID), files: false },
+    );
+  }
+
+  async commitRevert(sessionId) {
+    await this.request('POST', `/api/session/${encodeURIComponent(sessionId)}/revert/commit`);
+    this.sessionLog.info(`revert committed ${sessionId}`);
+    return true;
+  }
+
+  async clearRevert(sessionId) {
+    await this.request('DELETE', `/api/session/${encodeURIComponent(sessionId)}/revert`);
+    return true;
+  }
+
   async prompt(sessionId, text, { files, delivery } = {}) {
     this.sessionLog.info(`prompt -> ${sessionId}: ${String(text).replace(/\s+/g, ' ').slice(0, 300)}`);
     const body = { text };
@@ -901,6 +930,12 @@ export class OpenCodeEngine extends Engine {
       ? `/api/session/${encodeURIComponent(sessionId)}/form`
       : '/api/form';
     const r = await this.request('GET', path);
+    return Array.isArray(r?.data) ? r.data : [];
+  }
+
+  /** Work admitted but not yet visible in the transcript: a queued send. */
+  async listInbox(sessionId) {
+    const r = await this.request('GET', `/api/session/${encodeURIComponent(sessionId)}/inbox`);
     return Array.isArray(r?.data) ? r.data : [];
   }
 

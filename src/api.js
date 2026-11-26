@@ -13,6 +13,7 @@ import { answerTimeoutMs, formPages } from './auto-answer.js';
 import { AUTOMATION_DEFAULTS, AUTOMATION_KEYS, cleanAutomation, nextSynapse, readAutomation, mayEnableAutoShutdown } from './automation.js';
 import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
+import { lastExchange } from './session-remove.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets, createStopper } from './stop.js';
 import { PROJECTS_ROOT, SKILLS_DIR, ROOT, scratchDir, normDir, WEB_DIR } from './paths.js';
@@ -2600,7 +2601,65 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
 
     messages: async (sessionId) => {
       requireReady();
-      return { messages: await engine.getMessages(sessionId) };
+      const messages = await engine.getMessages(sessionId);
+      // The page uses this to decide whether the quiet Remove chip belongs on the
+      // chat tools. The server still checks again before it deletes anything; this
+      // is a preview, not a permission.
+      const remove = lastExchange(messages);
+      return {
+        messages,
+        remove: remove.ok
+          ? { available: true, count: remove.count, messageID: remove.messageID }
+          : { available: false, reason: remove.reason },
+      };
+    },
+
+    /**
+     * Remove the operator's last exchange from the chat.
+     *
+     * The engine's revert is a suffix boundary, not a message delete. Staging the
+     * last operator prompt and committing it therefore removes that prompt and
+     * everything the engine wrote after it — the one deletion the UI offers. The
+     * stage is asked not to restore files: this is a conversation edit, and the
+     * project's work stays exactly where it is.
+     */
+    removeLastExchange: async (sessionId) => {
+      requireReady();
+      const session = await engine.getSession(sessionId);
+      if (!session?.single) {
+        throw fail(409, 'Removing the last exchange is available in Single mode only.');
+      }
+      if (session.raw?.revert) {
+        throw fail(409, 'A removal is already staged for this chat.');
+      }
+      const active = await engine.listActiveSessions();
+      if (active.includes(sessionId)) {
+        throw fail(409, 'The chat is still working. Stop it before removing the exchange.');
+      }
+      const [forms, permissions, inbox] = await Promise.all([
+        engine.listForms(sessionId),
+        engine.listSessionPermissions(sessionId),
+        engine.listInbox(sessionId),
+      ]);
+      if (forms.length) throw fail(409, 'The chat is waiting on a question. Answer it first.');
+      if (permissions.length) throw fail(409, 'The chat is waiting on a permission. Answer it first.');
+      if (inbox.length) throw fail(409, 'The chat has a message queued. Wait for it to be read first.');
+
+      const messages = await engine.getMessages(sessionId);
+      const found = lastExchange(messages);
+      if (!found.ok) throw fail(409, found.reason);
+
+      try {
+        await engine.stageRevert(sessionId, found.messageID);
+        await engine.commitRevert(sessionId);
+      } catch (err) {
+        // A staged boundary without a commit would leave the session in a half
+        // state. Clear it, but keep the original failure as the answer.
+        try { await engine.clearRevert(sessionId); } catch { /* the session may be gone */ }
+        throw err;
+      }
+      app.info(`removed the last exchange ${sessionId} (${found.count} message(s))`);
+      return { ok: true, messageID: found.messageID, removed: found.count };
     },
 
     /**

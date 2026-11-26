@@ -641,6 +641,13 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       if (seg[2] === 'messages' && method === 'POST') {
         return sendJson(res, 200, await api.sendMessage(sessionId, await readBody(req, MESSAGE_BODY_LIMIT), actorOf(req), { remote: fromLan }));
       }
+      // Delete the last exchange. This changes only the conversation: the files,
+      // plan and worker sessions stay. A remote view may read the chat but not
+      // rewrite its history.
+      if (seg[2] === 'remove-last' && method === 'POST') {
+        if (fromLan) return sendJson(res, 403, { error: 'removing a message is done on the host only' });
+        return sendJson(res, 200, await api.removeLastExchange(sessionId));
+      }
       // POST /api/sessions/{id}/steer — guidance into work already running. The
       // engine reads it at the next step boundary; Stop is still the hard stop.
       if (seg[2] === 'steer' && method === 'POST') {
