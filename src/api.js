@@ -624,8 +624,12 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // A persona belongs to one project and one mode. Multi must never see its
       // text, even when the file exists; it only needs to know a Single-mode
       // persona is on file so the next turn does not keep using it by habit. A
-      // LAN view is never told it at all — not even that it exists.
-      const persona = !remote && role === 'architect' ? readPersona(directory) : null;
+      // private project keeps its persona behind the same privacy fence as its
+      // files: a LAN turn never sees it. A non-private project is the same over
+      // LAN as it is locally.
+      const persona = role === 'architect' && (!remote || !isPrivateDir(directory))
+        ? readPersona(directory)
+        : null;
       const text = briefSession({
         dir: directory,
         role,
@@ -1928,20 +1932,21 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     /**
      * A project's Single-mode persona.
      *
-     * Local only: the persona is personal and may name a private project's work.
-     * A LAN view never receives it, and a save never writes its text to a log.
+     * A private project hides it from a LAN view, exactly like the rest of the
+     * project's files. A non-private project serves it to either view. A save
+     * never writes its text to a log.
      */
     projectPersona: (id, { remote = false } = {}) => {
-      if (remote) throw fail(404, 'not found');
       const project = projects.find(id);
       if (!project) throw fail(404, 'project not found');
+      if (remote && isPrivateDir(project.directory)) throw fail(404, 'not found');
       return { persona: readPersona(project.directory) };
     },
 
     setProjectPersona: (id, body, { remote = false } = {}) => {
-      if (remote) throw fail(404, 'not found');
       const project = projects.find(id);
       if (!project) throw fail(404, 'project not found');
+      if (remote && isPrivateDir(project.directory)) throw fail(404, 'not found');
       return { persona: writePersona(project.directory, body) };
     },
 

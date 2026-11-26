@@ -674,9 +674,10 @@ run — so they get `Allow Screen` / `Allow Sign-In` and **no Always Allow**.
 - **A persona is a card label, not a role.** In Single the Architect card can read
   `Vekra (Architect)` with a small person mark; the transcript header stays `Architect`,
   the role id, picker and permissions stay `architect`, and Multi always says `Architect`.
-  The ✎ is mode-aware: persona in Single, the global role settings in Multi. A switch
-  writes one yellow Synapse note with a Compact action and never changes the conversation
-  by itself.
+  The ✎ is the same role-settings dialog in both modes: skills are shared, and in Single
+  its instruction box is the project persona while Multi's is the global block. A switch
+  leaves one yellow Synapse note with a Compact action, replaced in place on the next
+  switch and never changing the conversation by itself.
 - **The one dot left is a red stall mark**, clickable to interrupt. Green "has a
   conversation" and amber "working" went because the row already says both; a stall is
   rare enough that its absence need not reserve a 7px hole in every row.

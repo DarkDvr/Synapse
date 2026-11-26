@@ -14,7 +14,7 @@ import { busyNow } from './turn-live.js';
 import { state } from './state.js';
 import { waitBegin, waitStep, waitToken, waitRetry, waitMetrics, waitEnd, waitingText } from './waiting.js';
 import { startWaitMetrics, stopWaitMetrics } from './wait-metrics.js';
-import { loadPersona, clearPersonaState, renderPersonaCard, editPersona } from './persona.js';
+import { loadPersona, clearPersonaState, renderPersonaCard } from './persona.js';
 import { setModeNote, clearModeNote } from './mode-note.js';
 import { esc, relTime, hhmm, hhmmss, toolTarget, versionTag, shortSpan, fmtBytes, samePath, ago, shortName } from './format.js';
 import { loadPlan, renderPlan, updatePlanOverflow, planPaneWiring } from './plan-pane.js';
@@ -2776,11 +2776,7 @@ document.addEventListener('keydown', (e) => {
     btn.addEventListener('click', (e) => {
       e.preventDefault();
       const role = btn.closest('.role-card')?.querySelector('.role-model')?.dataset.role;
-      if (!role) return;
-      // The same ✎ is two dialogs by mode: Single edits this project's voice,
-      // Multi edits the serious role settings (skills + global instructions).
-      if (role === 'architect' && state.mode === 'single') editPersona();
-      else editRoleSettings(role);
+      if (role) editRoleSettings(role);
     }),
   );
 

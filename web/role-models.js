@@ -19,6 +19,7 @@ import { modelByRef, selectionFor, topEfforts, variantsOf, ROLES, currentProject
 import { renderTranscript } from './transcript.js';
 import { pickers, syncPickerInput } from './model-picker.js';
 import { clearRoleRate } from './role-rate-store.js';
+import { loadPersona, savePersona, PERSONA_MAX_NAME, PERSONA_MAX_TEXT } from './persona.js';
 
 const missing = (name) => () => {
   throw new Error(`role-models.js: ${name} was not wired at boot`);
@@ -187,7 +188,21 @@ export async function saveRoleSelection(roleId, ref, variant) {
  */
 export async function editRoleSettings(roleId) {
   const role = ROLES.find((r) => r.id === roleId);
-  const entry = state.config?.roles?.[roleId] || {};
+  const isPersona = roleId === 'architect' && state.mode === 'single';
+  const project = currentProject();
+  if (isPersona) {
+    if (!project?.id) {
+      toast('No Project Open', 'Open a project before giving it a persona.');
+      return;
+    }
+    if (state.personaFor !== project.id) await loadPersona();
+  }
+  const base = state.config?.roles?.[roleId] || {};
+  const persona = isPersona ? state.persona : null;
+  const hadPersona = Boolean(persona?.name || persona?.instructions);
+  // Single uses the same card dialog as Multi; only the instruction box changes
+  // its meaning. Skills stay the role's skills in both modes.
+  const entry = isPersona ? { ...base, instructions: persona?.instructions || '' } : base;
   let installed = [];
   try {
     installed = (await api('GET', '/api/skills')).skills || [];
@@ -239,20 +254,48 @@ export async function editRoleSettings(roleId) {
         must: (entry.mustLoad || []).includes(o.v),
       })),
   });
+  if (isPersona) {
+    fields.push({
+      name: 'personaName',
+      type: 'text',
+      label: 'Persona name (Single mode only)',
+      value: persona?.name || '',
+      placeholder: 'Vekra',
+      hint: 'The name on the Architect card in Single mode. Optional; without one the card stays “Architect”.',
+    });
+  }
   fields.push({
     name: 'instructions',
     type: 'textarea',
-    label: 'Instructions for this role',
+    label: isPersona
+      ? 'Instructions / Persona for this role (Single mode only)'
+      : 'Instructions for this role',
     value: entry.instructions || '',
-    placeholder: 'Anything it should remember every turn. Optional.',
+    placeholder: isPersona
+      ? 'You are Vekra, the Architect for this project. Call me Andrew. Strict and professional about the work, dryly playful with me...'
+      : 'Anything it should remember every turn. Optional.',
+    hint: isPersona
+      ? 'This replaces the global Architect instructions for this project in Single mode. Multi keeps the global block.'
+      : '',
   });
+  if (isPersona && persona && (persona.name || persona.instructions)) {
+    fields.push({
+      name: 'removePersona',
+      type: 'check',
+      label: 'Remove this persona',
+      value: false,
+      hint: 'The card returns to “Architect” and Single uses the global Architect instructions again.',
+    });
+  }
 
   const result = await wired.openDialog({
     title: `Settings for ${role?.name || roleId}`,
     message:
       roleId === 'qc'
         ? 'Tick a skill to let this role load it; “Required” makes the brief demand it, and the Architect is told if it was skipped. Real use is the default focus: the wording, the clipping and the bad input an ordinary person meets.'
-        : 'Tick a skill to let this role load it; “Required” makes the brief demand it, and the Architect is told if it was skipped. Instructions are added to what the role is told on every turn.',
+        : isPersona
+          ? 'Skills apply in both modes. The instruction box is this project\'s Single-mode persona; Multi keeps the global Architect instructions. With no persona, Single uses the global block.'
+          : 'Tick a skill to let this role load it; “Required” makes the brief demand it, and the Architect is told if it was skipped. Instructions are added to what the role is told on every turn.',
     fields,
     confirmLabel: 'Save',
     afterRender: () => {
@@ -271,6 +314,20 @@ export async function editRoleSettings(roleId) {
   });
   if (!result || !Array.isArray(result.skills)) return;
 
+  const text = String(result.instructions || '').trim();
+  const personaName = isPersona
+    ? String(result.personaName || '').replace(/\s+/g, ' ').trim()
+    : '';
+  if (isPersona && personaName.length > PERSONA_MAX_NAME) {
+    toast('Name Too Long', `Keep the persona name to ${PERSONA_MAX_NAME} characters or fewer.`);
+    return;
+  }
+  if (isPersona && text.length > PERSONA_MAX_TEXT) {
+    toast('Persona Too Long', `Keep the persona instructions to ${PERSONA_MAX_TEXT} characters or fewer.`);
+    return;
+  }
+  const removePersona = isPersona && hadPersona && (result.removePersona === true || (!personaName && !text));
+
   const draft = JSON.parse(JSON.stringify(state.config || {}));
   draft.roles = { ...(draft.roles || {}) };
   const next = { ...(draft.roles[roleId] || {}) };
@@ -284,17 +341,39 @@ export async function editRoleSettings(roleId) {
   if (mustLoad.length) next.mustLoad = mustLoad;
   else delete next.mustLoad;
   if (roleId === 'qc') next.focus = result.focus === 'security' ? 'security' : 'app';
-  const text = String(result.instructions || '').trim();
-  if (text) next.instructions = text;
-  else delete next.instructions;
+  // In Single the instruction box is the project's persona, not the global
+  // Architect text. Leave the global entry untouched for Multi.
+  if (!isPersona) {
+    if (text) next.instructions = text;
+    else delete next.instructions;
+  }
   draft.roles[roleId] = next;
 
   try {
     state.config = await api('PUT', '/api/config', draft);
-    toast(
-      'Role Saved',
-      `${role?.name || roleId}${roleId === 'qc' ? ` · ${next.focus === 'security' ? 'security' : 'real use'}` : ''}.`,
-    );
+    if (isPersona) {
+      if (hadPersona || removePersona || personaName || text) {
+        try {
+          await savePersona(project.id, removePersona ? null : { name: personaName, instructions: text });
+        } catch (err) {
+          toast('Could Not Save the Persona', err.message);
+          return;
+        }
+      }
+      toast(
+        removePersona ? 'Persona Removed' : personaName || text ? 'Persona Saved' : 'Role Saved',
+        removePersona
+          ? 'Single mode uses the global Architect instructions again. Skills stay saved for both modes.'
+          : personaName || text
+            ? 'Skills apply in both modes; the persona is Single mode only.'
+            : `${role?.name || roleId} settings saved for both modes.`,
+      );
+    } else {
+      toast(
+        'Role Saved',
+        `${role?.name || roleId}${roleId === 'qc' ? ` · ${next.focus === 'security' ? 'security' : 'real use'}` : ''}.`,
+      );
+    }
     // The ruleset follows the mode at the next send, so a changed skill list
     // reaches the chat then — no separate PATCH, and nothing to go stale.
   } catch (err) {

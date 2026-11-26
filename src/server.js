@@ -579,15 +579,14 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       if (seg[2] === 'private' && method === 'POST') {
         return sendJson(res, 200, await api.setProjectPrivate(projectId, await readBody(req)));
       }
-      // The project's Single-mode persona. Local only, by design: a LAN view is
-      // never told the name or the text. The file is inside `.project`, and the
-      // save path never logs its contents.
+      // The project's Single-mode persona. A private project hides it from a LAN
+      // view with the rest of its files; a non-private project serves it to
+      // either view. The file is inside `.project`, and the save path never logs
+      // its contents.
       if (seg[2] === 'persona' && method === 'GET') {
-        if (fromLan) return sendJson(res, 404, { error: 'not found' });
         return sendJson(res, 200, await api.projectPersona(projectId, { remote: fromLan }));
       }
       if (seg[2] === 'persona' && method === 'PUT') {
-        if (fromLan) return sendJson(res, 404, { error: 'not found' });
         return sendJson(res, 200, await api.setProjectPersona(projectId, await readBody(req), { remote: fromLan }));
       }
       if (seg.length === 2 && method === 'DELETE') {

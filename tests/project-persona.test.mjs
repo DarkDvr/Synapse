@@ -58,18 +58,18 @@ test('the records repository does not version the persona', () => {
   assert.match(vcsIgnore(), /persona\.json/);
 });
 
-test('the persona route is local only and writes through the project', () => {
+test('the persona route hides only a private project from LAN and writes through the project', () => {
   const server = read('src/server.js');
   const api = read('src/api.js');
   assert.match(server, /seg\[2\] === 'persona' && method === 'GET'/);
   assert.match(server, /seg\[2\] === 'persona' && method === 'PUT'/);
-  assert.match(server, /if \(fromLan\) return sendJson\(res, 404, \{ error: 'not found' \}\);/);
   assert.match(api, /projectPersona: \(id, \{ remote = false \} = \{\}\)/);
   assert.match(api, /setProjectPersona: \(id, body, \{ remote = false \} = \{\}\)/);
-  assert.match(api, /if \(remote\) throw fail\(404, 'not found'\)/);
+  assert.match(api, /remote && isPrivateDir\(project\.directory\)/);
   assert.match(api, /readPersona\(project\.directory\)/);
   assert.match(api, /writePersona\(project\.directory, body\)/);
-  // The brief must not use a persona for a LAN send either, even if the file exists.
-  assert.match(api, /!remote && role === 'architect' \? readPersona\(directory\) : null/);
+  // The brief hides it only for a private project on LAN; a non-private project
+  // serves the same persona to either view.
+  assert.match(api, /role === 'architect' && \(!remote \|\| !isPrivateDir\(directory\)\)/);
   assert.match(server, /api\.sendMessage\(sessionId, .*remote: fromLan/);
 });

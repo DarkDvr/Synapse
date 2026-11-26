@@ -68,6 +68,11 @@ test('a persona mode note is drawn as a harness line, with its Compact action', 
   assert.match(page.innerHTML, /data-mode-note/);
   assert.match(page.innerHTML, /Vekra was the Single-mode persona/);
   assert.match(page.innerHTML, /data-mode-compact/);
+  // Clicking back and forth replaces the one note in place; it never stacks.
+  state.modeNote = { at: Date.now() + 1, kind: 'on', persona: 'Vekra' };
+  renderTranscript();
+  assert.equal((page.innerHTML.match(/data-mode-note/g) || []).length, 1);
+  assert.match(page.innerHTML, /Vekra is back as the Single-mode persona/);
   state.modeNote = null;
   renderTranscript();
   assert.doesNotMatch(page.innerHTML, /data-mode-note/);

@@ -7,6 +7,8 @@
 import { state } from './state.js';
 import { esc } from './format.js';
 
+// One slot, not a list: a second switch rewrites the note already at the end of
+// the chat, so clicking Single/Multi repeatedly cannot stack notices.
 export function setModeNote(kind, persona = '') {
   state.modeNote = {
     at: Date.now(),

@@ -2,8 +2,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { state } from '../web/state.js';
-import { architectLabel, loadPersona } from '../web/persona.js';
+import { installPage } from './fake-page.mjs';
+
+installPage();
+const { state } = await import('../web/state.js');
+const { architectLabel, loadPersona, renderPersonaCard } = await import('../web/persona.js');
 import { ICONS } from '../web/icons.js';
 import { setModeNote, clearModeNote, modeNoteHtml } from '../web/mode-note.js';
 
@@ -16,6 +19,37 @@ test('the card is named only in Single, and keeps the role in parentheses', () =
   state.persona = null;
   state.mode = 'single';
   assert.equal(architectLabel(), 'Architect');
+  // A voice without a name still counts as a persona for the glyph, but the
+  // card label stays the role.
+  state.persona = { name: '', instructions: 'Speak softly.' };
+  assert.equal(architectLabel(), 'Architect');
+});
+
+test('the card carries the persona mark in Single and never in Multi', () => {
+  const h3 = { innerHTML: '', title: '', _personaKey: '' };
+  const edit = { title: '', getAttribute: () => '', setAttribute() {} };
+  const card = {
+    querySelector: (sel) => (sel === '.role-head h3' ? h3 : sel === '.ic-edit' ? edit : null),
+  };
+  const oldQuery = globalThis.document.querySelector;
+  globalThis.document.querySelector = () => card;
+  try {
+    state.persona = { name: 'Vekra', instructions: 'Speak.' };
+    state.mode = 'single';
+    renderPersonaCard();
+    assert.match(h3.innerHTML, /set-ic/);
+    assert.match(h3.innerHTML, /Vekra \(Architect\)/);
+    assert.match(h3.title, /Vekra/);
+    state.mode = 'multi';
+    renderPersonaCard();
+    assert.doesNotMatch(h3.innerHTML, /set-ic/);
+    assert.equal(h3.innerHTML, 'Architect');
+    assert.equal(h3.title, '');
+  } finally {
+    globalThis.document.querySelector = oldQuery;
+    state.persona = null;
+    state.mode = 'single';
+  }
 });
 
 test('a persona has a person mark, not an emoji', () => {
@@ -84,12 +118,16 @@ test('loadPersona reads the open project and clears on a null answer', async () 
   }
 });
 
-test('the app wires the mode note and the mode-aware editor', () => {
+test('the app wires the mode note and the shared role dialog', () => {
   const app = fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
   assert.match(app, /setModeNote\('off'/);
   assert.match(app, /setModeNote\('on'/);
-  assert.match(app, /role === 'architect' && state\.mode === 'single'\) editPersona\(\)/);
+  assert.match(app, /if \(role\) editRoleSettings\(role\);/);
   assert.match(app, /clearModeNote\(\);/);
+  const roleModels = fs.readFileSync(new URL('../web/role-models.js', import.meta.url), 'utf8');
+  assert.match(roleModels, /roleId === 'architect' && state\.mode === 'single'/);
+  assert.match(roleModels, /Instructions \/ Persona for this role \(Single mode only\)/);
+  assert.match(roleModels, /savePersona\(project\.id/);
   const composer = fs.readFileSync(new URL('../web/composer.js', import.meta.url), 'utf8');
   assert.match(composer, /clearModeNote\(\);/);
 });
