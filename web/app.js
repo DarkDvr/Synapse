@@ -2620,10 +2620,10 @@ document.addEventListener('keydown', (e) => {
     if (project) { openProjectChat(project.dataset.project); return; }
   });
 
-  // The row opens its chat on one click; two clicks also open the folder, the
-  // same act as Browse. There is no delay on the single click: a project row is
-  // the most-used control in the rail, and a 250ms debounce to tell the two apart
-  // would be felt on every ordinary click.
+  // The row opens its chat on one click; clicking the one already open is a no-op,
+  // and two clicks also open the folder, the same act as Browse. There is no delay
+  // on the single click: a project row is the most-used control in the rail, and a
+  // 250ms debounce to tell the two apart would be felt on every ordinary click.
   $('projectTree').addEventListener('dblclick', (e) => {
     if (e.target.closest('[data-menu-project]')) return;
     const row = e.target.closest('[data-project-row]');

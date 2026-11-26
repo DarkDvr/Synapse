@@ -198,13 +198,19 @@ export function projectUsed(project) {
   return tokens > 0 || Number(chat.updated || 0) > Number(chat.created || 0) + 1000;
 }
 
+/** Is this project's chat the one already on screen? */
+export function projectChatOpen(project) {
+  const chat = newestSession(project);
+  return Boolean(chat && state.view === 'session' && chat.id === state.sessionId);
+}
+
 export function renderTree() {
   const el = $('projectTree');
   if (!el) return;
   const html = state.projects
     .map((p) => {
       const chat = newestSession(p);
-      const current = Boolean(chat) && state.view === 'session' && chat.id === state.sessionId;
+      const current = projectChatOpen(p);
       const working = Boolean(chat) && sessionWorking(chat.id);
       const waiting = waitingIn(p.directory);
       const waitNote =
@@ -263,6 +269,10 @@ export async function openProjectChat(id) {
     }
     const chat = newestSession(p);
     if (chat) {
+      // Clicking the project that is already open is not a request to reload it:
+      // re-opening cleared the draft and reset the transcript's scroll, and a
+      // double-click (open folder) sent that click first. There is nothing to do.
+      if (projectChatOpen(p)) return;
       await wired.openSession(chat.id);
       return;
     }

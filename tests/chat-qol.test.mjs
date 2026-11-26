@@ -8,6 +8,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { state } from '../web/state.js';
+import { projectChatOpen, openProjectChat, projectsWiring } from '../web/projects.js';
 
 const read = (rel) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8');
 
@@ -21,6 +23,19 @@ test('double-clicking a project row opens its folder, the same as Browse', () =>
   // Two clicks arrive before the first open has finished: one project must not make
   // two sessions.
   assert.match(read('web/projects.js'), /const openingChats = new Set\(\)/, 'nothing guards a double-open');
+});
+
+test('clicking the project that is already open does not re-open it', async () => {
+  state.projects = [{ id: 'p1', directory: 'F:/p1', sessions: [{ id: 'c1', created: 1 }] }];
+  state.sessionId = 'c1';
+  state.view = 'session';
+  assert.equal(projectChatOpen(state.projects[0]), true);
+  let reopened = false;
+  projectsWiring({ openSession: async () => { reopened = true; } });
+  await openProjectChat('p1');
+  assert.equal(reopened, false, 'the open chat was opened again, clearing its draft');
+  state.view = 'none';
+  assert.equal(projectChatOpen(state.projects[0]), false, 'a hidden chat still counts as open');
 });
 
 test('the whole chat is a drop target for files, and only while the composer can take them', () => {

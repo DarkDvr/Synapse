@@ -660,11 +660,13 @@ run — so they get `Allow Screen` / `Allow Sign-In` and **no Always Allow**.
 ## The rail, the plan and Settings
 
 - **The rail is a list of projects, one row each.** Clicking a row opens the project's
-  one conversation; double-clicking it opens the folder, the same as Browse. The menu — the
-  `⋯` or Shift+F10 — offers Browse, Cmd, Rename, Delete and **Move Up / Move Down**, the ends
-  disabled rather than a click that does nothing. A right-click is the page's text menu
-  instead (Copy, Select All, Copy Into Chat), never this project menu. The two clicks of a
-  double-click can arrive before the first open has returned, so `openProjectChat` remembers
+  one conversation; clicking the row that is **already open is a no-op**, because re-opening
+  it cleared the draft and reset the transcript's scroll — and the first click of a
+  double-click is still a click. Double-clicking a row opens the folder, the same as Browse.
+  The menu — the `⋯` or Shift+F10 — offers Browse, Cmd, Rename, Delete and **Move Up / Move
+  Down**, the ends disabled rather than a click that does nothing. A right-click is the page's
+  text menu instead (Copy, Select All, Copy Into Chat), never this project menu. The two clicks
+  of a double-click can arrive before the first open has returned, so `openProjectChat` remembers
   the project it is already opening; otherwise a project with no chat would make two.
 - **The order is the registry file**, written in the order shown, a new project appended.
   Nothing is sorted by name: a rename must not move a row the operator is looking for. The
