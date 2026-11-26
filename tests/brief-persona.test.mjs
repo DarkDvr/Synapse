@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { briefSession } from '../src/plans.js';
+import { appendEntry } from '../src/project-doc.js';
 
 const temp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'synapse-brief-persona-'));
 const persona = { name: 'Vekra', instructions: 'Speak as Vekra. Call me Andrew.' };
@@ -37,6 +38,31 @@ test('Single without a persona has no global voice', () => {
     assert.doesNotMatch(text, /GLOBAL RULE/);
     assert.doesNotMatch(text, /The operator adds/);
     assert.doesNotMatch(text, /Vekra/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Single gets the system rules it can use, not the QC allowance', () => {
+  const dir = temp();
+  try {
+    appendEntry(dir, 'chat', 'hello');
+    const text = briefSession({ dir, role: 'architect', single: true });
+    assert.doesNotMatch(text, /QC:/);
+    assert.match(text, /No tool named/);
+    assert.match(text, /\[steer\]/);
+    assert.match(text, /conversation is the bill/);
+    assert.match(text, /The project document is \.project\/project\.md/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Multi keeps the QC allowance', () => {
+  const dir = temp();
+  try {
+    const text = briefSession({ dir, role: 'architect', single: false });
+    assert.match(text, /QC:/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

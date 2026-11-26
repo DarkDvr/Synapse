@@ -1153,19 +1153,23 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   // delegate QC, and wrote "the delegation was refused" into the plan — a refusal
   // that never happened (27 Oct, t7).
   if (isArchitect) {
-    const qcSpent = qcRoundsUsed(dir);
-    lines.push(
-      qcSpent >= QC_ROUNDS
-        ? `QC: all ${QC_ROUNDS} independent QC rounds for this plan are spent. Do not plan another QC task — settle any check yourself and say in the plan that you did.`
-        : `QC: ${qcSpent} of ${QC_ROUNDS} independent QC rounds spent for this plan. A QC task will run if you delegate it; a finished plan starts a new allowance.`,
-    );
+    // QC is a delegation allowance, so it belongs to Multi. Single cannot
+    // delegate, and telling it a QC task could run invited the exact turn the
+    // Single rules forbid.
+    if (!single) {
+      const qcSpent = qcRoundsUsed(dir);
+      lines.push(
+        qcSpent >= QC_ROUNDS
+          ? `QC: all ${QC_ROUNDS} independent QC rounds for this plan are spent. Do not plan another QC task — settle any check yourself and say in the plan that you did.`
+          : `QC: ${qcSpent} of ${QC_ROUNDS} independent QC rounds spent for this plan. A QC task will run if you delegate it; a finished plan starts a new allowance.`,
+      );
+    }
     // Showing the operator something is a sentence, not a wall of pixels. The
     // chat turns a local image into a chip and shows the picture on hover; the
     // chip is temporary with the message, so nothing is copied or kept.
     lines.push(
-      `To show the operator a picture, keep the image in the project (screenshots belong in .project/shots) and ` +
-        `write it as markdown: ![what it shows](.project/shots/shot.png). It appears as a chip in your message, ` +
-        `and the picture full size when the operator hovers it. Never paste image data into a message.`,
+      `To show a picture, keep it in .project/shots and write it as markdown: ` +
+        `![what it shows](.project/shots/shot.png); it becomes a chip and opens on hover. Never paste image data.`,
     );
   }
   // Where evidence lives while a worker works. Said to every role, because every role
@@ -1225,7 +1229,27 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     // The operator's own standing rules are about this project, not about the old
     // campaign: they apply to a one-off request too. The stored requests do not.
     if (doc.notes) lines.push(`The operator's standing notes for this project:\n${plain(capped(doc.notes, 800))}`);
+    // The full document is not context to load by habit. A switch from Multi to
+    // Single can carry a long history; this line gives the file a name only for the
+    // request that actually depends on an earlier decision.
+    if (doc.exists) {
+      lines.push(
+        `The project document is ${DOC_RELATIVE}: it holds earlier decisions and the last handover. Do not ` +
+          `read it by default; open only the part this request depends on, and do not treat the old request as ` +
+          `the current job.`,
+      );
+    }
     if (skills) lines.push(skills);
+    // These are the factual rules a Single chat still needs. The rest of the
+    // Architect brief is about judging and delegation, which Single must not do.
+    lines.push(
+      '"No tool named …" means the name is wrong: read the exact name from the tool list.',
+    );
+    lines.push(
+      'A [steer] message is guidance for this turn and may add a request the operator forgot; apply it, and ' +
+        'ask before dropping the current job if it changes it.',
+    );
+    lines.push('Your conversation is the bill: name a long file, do not paste it.');
     // The same law as the harness brief carries, because Single can run commands too:
     // a chat that starts a server must stop that one, by its id.
     lines.push(
