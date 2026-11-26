@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { safeDownloadName, uniqueDownloadPath, formatBytes, progressBar } from '../src/browser/downloads.js';
 import { downloadBody, downloadAt, downloadsInWindow } from '../web/downloads.js';
+import { renderMessage } from '../web/transcript.js';
 import { createApi } from '../src/api.js';
 import { PROJECTS_ROOT } from '../src/paths.js';
 import { tmpdir } from './tmpdir.mjs';
@@ -55,9 +56,9 @@ test('the chat chip carries the name, the bar and the saved path', () => {
   assert.match(html, /100%/);
 });
 
-test('a download stays with the action that started it, not where it finished', () => {
-  // The card belongs to the click/download call, so it sits among the tool calls above
-  // the report even when the file finishes after the report has begun (22 Nov).
+test('a download stays with the post that started it, not where it finished', () => {
+  // The card belongs to the turn's download queue; the finish time must not move it
+  // into a later post (22 Nov).
   assert.equal(downloadAt({ state: 'inProgress', startedAt: 1 }), 1);
   assert.equal(downloadAt({ state: 'completed', startedAt: 1, endedAt: 4242 }), 1);
   // And it folds to its head: the bar, the bytes and the path were the live state.
@@ -77,6 +78,20 @@ test('a card belongs to the post it happened in, not the bottom of the page', ()
   // The newest post has no next one.
   assert.deepEqual(downloadsInWindow([saved, live], 1000).map((d) => d.id), ['saved', 'live']);
   assert.deepEqual(downloadsInWindow([saved], 2000), []);
+});
+
+test('the download queue sits above the thinking pane, not above the turn', () => {
+  const html = renderMessage(
+    { id: 'a', type: 'assistant', parts: [{ type: 'text', text: 'answer' }] },
+    '<div class="thinking-pane">pane</div>',
+    [{ id: 'd', name: 'file.zip', state: 'inProgress', received: 1, total: 2, startedAt: 1 }],
+  );
+  const download = html.indexOf('data-download-card="d"');
+  const answer = html.indexOf('answer');
+  const pane = html.indexOf('thinking-pane');
+  assert.ok(download >= 0, 'the card is missing');
+  assert.ok(answer >= 0 && download > answer, 'the card sits after the turn blocks');
+  assert.ok(pane >= 0 && download < pane, 'the card sits before the thinking pane');
 });
 
 test('a failed download says so instead of a path', () => {

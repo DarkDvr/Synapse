@@ -461,16 +461,13 @@ export function renderTranscript() {
     const m = showable[i];
     const at = Number(m.created) || 0;
     while (next < items.length && at && items[next].at < at) html += items[next++].html;
-    let extras = '';
+    let mine = [];
     if (m.type === 'assistant' && downloads.length) {
       const until = Number(showable[i + 1]?.created) || Number.POSITIVE_INFINITY;
-      const mine = downloadsInWindow(downloads, at, until).filter((d) => !placedDownloads.has(d.id));
-      if (mine.length) {
-        mine.forEach((d) => placedDownloads.add(d.id));
-        extras = mine.map(downloadCard).join('');
-      }
+      mine = downloadsInWindow(downloads, at, until).filter((d) => !placedDownloads.has(d.id));
+      mine.forEach((d) => placedDownloads.add(d.id));
     }
-    if (!movedCompactions.has(m)) html += renderMessage(m, i === paneAt ? paneTail : '', extras, removeFrom >= 0 && i >= removeFrom);
+    if (!movedCompactions.has(m)) html += renderMessage(m, i === paneAt ? paneTail : '', mine, removeFrom >= 0 && i >= removeFrom);
   }
   while (next < items.length) html += items[next++].html;
   if (liveTail && paneAt === -1) html += liveTail;
@@ -513,7 +510,7 @@ export function renderTranscript() {
 }
 
 // The role label shares the first line with the text; the time rides the right.
-export function renderMessage(m, tail = '', extras = '', remove = false) {
+export function renderMessage(m, tail = '', downloads = [], remove = false) {
   const t = hhmm(m.created);
   const stamp = t ? `<span class="msg-time">${t}</span>` : '';
   // The name this post travels under while it slides in. Every message the page draws
@@ -740,10 +737,10 @@ export function renderMessage(m, tail = '', extras = '', remove = false) {
       );
     }
     if (m.error) body.push(`<div class="msg-error">${esc(m.error)}</div>`);
-    // A download belongs with the browser's tool cards, above the reasoning — never as
-    // an extra after it. It was drawn below the thinking pane, which is the one place
-    // nothing goes (the operator's rule); the card itself is already a tool card.
-    if (extras) body.splice(1, 0, extras);
+    // Downloads are a queue, not a header: the oldest card sits here first and the
+    // latest is closest to the thinking pane. Putting them at body index 1 made a
+    // still-downloading file look like the first thing that happened in the turn.
+    if (Array.isArray(downloads)) for (const d of downloads) body.push(downloadCard(d));
     return `<div class="msg assistant${taken}"${line}${takenAttr} data-msg="assistant"><div class="msg-body">${body.join('')}${tail}</div></div>`;
   }
   const body = m.error
