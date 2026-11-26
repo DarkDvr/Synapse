@@ -38,3 +38,30 @@ test('the line is one node, not a post of its own', () => {
   assert.equal((html.match(/data-wait/g) || []).length, 1);
   assert.doesNotMatch(html, /Reading prompt/);
 });
+
+test('the engine’s own empty unfinished message wears the same line', () => {
+  state.wait = { phase: 'prefill', at: Date.now() - 10_000, read: 8192, total: 108553, elapsed: 10 };
+  const html = renderMessage({
+    id: 'engine-empty',
+    type: 'assistant',
+    completed: false,
+    created: 1_700_000_000_000,
+    parts: [],
+  }, '');
+  assert.match(html, /data-wait/);
+  assert.match(html, /Reading prompt 8,192 \/ 108,553/);
+  assert.doesNotMatch(html, /<span class="msg-text">…<\/span>/);
+});
+
+test('a finished empty message keeps the ellipsis', () => {
+  state.wait = { phase: 'waiting', at: Date.now(), read: 0, total: 0, elapsed: 0 };
+  const html = renderMessage({
+    id: 'engine-finished-empty',
+    type: 'assistant',
+    completed: true,
+    created: 1_700_000_000_000,
+    parts: [],
+  }, '');
+  assert.match(html, /<span class="msg-text">…<\/span>/);
+  assert.doesNotMatch(html, /data-wait/);
+});

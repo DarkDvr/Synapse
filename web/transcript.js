@@ -625,6 +625,11 @@ export function renderMessage(m, tail = '', extras = '') {
   if (m.type === 'assistant') {
     const body = [`${stamp}<span class="msg-role">Architect</span>`];
     const parts = m.parts || [];
+    // The page's own live post is not the only empty post a turn can have: the
+    // engine creates its assistant message before it has any parts, and a poll
+    // can replace the page's post with it. An unfinished empty message is the
+    // same moment, so it wears the same waiting line instead of a bare ellipsis.
+    const waitingHere = m.live || (m.completed === false && !tail);
     // The last text of a message that has no tool calls is the answer: it gets
     // the green rule down its left, so prose is one glance away from the
     // reasoning and tool cards above it. Narration in a step that also calls a
@@ -710,7 +715,7 @@ export function renderMessage(m, tail = '', extras = '') {
       body.push(`<div class="trace-line is-waiting">${esc(state.liveTool)}</div>`);
     } else if (parts.length === 0 && !m.error && !(m.live && tail)) {
       body.push(
-        m.live
+        waitingHere
           ? `<div class="trace-line is-waiting" data-wait>${esc(waitingText(state.wait, serverNow()) || 'Thinking…')}</div>`
           : '<span class="msg-text">…</span>',
       );
