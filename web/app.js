@@ -30,6 +30,7 @@ chatSession,
   isStalled,
   newestSession,
   projectsWiring,
+  toggleArchiveSection,
 } from './projects.js';
 import { readPath, writePath, maskSecret, slugify, modelLines, parseModelLines, isLocalServer, providerBadge } from './settings-data.js';
 import { providerLabel, providerOrderOf, hiddenProviderIds } from './provider-list.js';
@@ -2678,6 +2679,7 @@ document.addEventListener('keydown', (e) => {
 
   $('projectTree').addEventListener('click', (e) => {
     if (e.target.closest('[data-soon]')) return;
+    if (e.target.closest('[data-archive-toggle]')) { toggleArchiveSection(); return; }
     const menu = e.target.closest('[data-menu-project]');
     if (menu) {
       e.preventDefault();
@@ -3245,23 +3247,26 @@ function rememberSession(id) {
 }
 async function restoreOpenSession() {
   if (state.sessionId) return;
+  // An archived project is not restored as the open chat on the next page load.
+  // Its files are still there; the operator opens it from Archived when wanted.
+  const usable = (id) => Boolean(id && chatSession(id) && !projectOf(id)?.archived);
   let target = null;
   try {
     const pending = await api('GET', '/api/pending');
     const ids = [...(pending.forms || []).map((f) => f.sessionId), ...(pending.active || [])];
-    target = ids.find((id) => id && chatSession(id)) || null;
+    target = ids.find(usable) || null;
   } catch { /* the pending list is a nicety here, not a requirement */ }
   if (!target) {
     let saved = null;
     try { saved = localStorage.getItem(LAST_SESSION_KEY); } catch { /* blocked storage */ }
-    if (saved && chatSession(saved)) target = saved;
+    if (usable(saved)) target = saved;
   }
   if (!target) {
     // The session was replaced by a compact, or deleted: open the project's
     // current chat rather than an empty screen.
     let savedProject = null;
     try { savedProject = localStorage.getItem(LAST_PROJECT_KEY); } catch { /* blocked storage */ }
-    const project = savedProject ? state.projects.find((p) => p.id === savedProject) : null;
+    const project = savedProject ? state.projects.find((p) => p.id === savedProject && !p.archived) : null;
     const chat = project ? newestSession(project) : null;
     if (chat) target = chat.id;
   }

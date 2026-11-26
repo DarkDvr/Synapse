@@ -47,6 +47,12 @@ leaves a handover behind. All five phases were built on 27 Oct.
     private project hides the persona from a LAN view with the rest of its files;
     a non-private project serves it to either view, exactly like its conversation.
 
+**Archive is a registry flag, not a folder move.** `archivedAt` lives in
+`data/projects.json`; the project, its chat, plan and sessions stay exactly where
+they are. The rail filters archived projects into a closed **Archived** section at
+the bottom. A working or waiting project cannot be archived, and the open project
+is closed when it is archived. Unarchive restores it to the active list.
+
 ## How compaction works
 
 The engine can be asked to compact at any time; `engine.compact()` is queued at the

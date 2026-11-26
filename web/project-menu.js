@@ -12,9 +12,17 @@ import { esc, fmtBytes } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
-import { loadProjects, openProjectChat, openProjectFolder, renderTree } from './projects.js';
+import {
+  loadProjects,
+  openProjectChat,
+  openProjectFolder,
+  renderTree,
+  newestSession,
+  sessionWorking,
+  projectChatOpen,
+} from './projects.js';
 import { chatBody } from './mode.js';
-import { projectOf } from './run-view.js';
+import { projectOf, waitingIn } from './run-view.js';
 import { ago } from './format.js';
 
 const missing = (name) => () => {
@@ -49,11 +57,12 @@ export function openProjectMenu(id, x, y) {
   const el = $('projectMenu');
   if (!p || !el) return;
   menuProjectId = id;
-  // The rail is the registry order, so the ends are where a move stops. The menu
-  // disables the impossible one rather than letting a click do nothing.
-  const at = state.projects.findIndex((q) => q.id === id);
+  // Move only among visible peers: an archived project is not a neighbour of an
+  // active one, so the ends are the ends of that project's own list.
+  const peers = state.projects.filter((q) => Boolean(q.archived) === Boolean(p.archived));
+  const at = peers.findIndex((q) => q.id === id);
   const first = at <= 0;
-  const last = at < 0 || at >= state.projects.length - 1;
+  const last = at < 0 || at >= peers.length - 1;
   el.innerHTML = `
     <button type="button" class="project-menu-item" data-menu-action="browse" role="menuitem">Browse</button>
     <button type="button" class="project-menu-item" data-menu-action="cmd" role="menuitem">Cmd</button>
@@ -61,6 +70,7 @@ export function openProjectMenu(id, x, y) {
     <button type="button" class="project-menu-item is-toggle${p.private ? ' is-on' : ''}" data-menu-action="private" role="menuitemcheckbox" aria-checked="${p.private ? 'true' : 'false'}" title="No log lines or records outside this project's folder">
       <span>Private</span><span class="project-menu-mark" aria-hidden="true">${p.private ? '✓' : ''}</span>
     </button>
+    <button type="button" class="project-menu-item" data-menu-action="archive" role="menuitem">${p.archived ? 'Unarchive' : 'Archive'}</button>
     <span class="project-menu-sep" aria-hidden="true"></span>
     <button type="button" class="project-menu-item" data-menu-action="up" role="menuitem"${first ? ' disabled' : ''}>Move Up</button>
     <button type="button" class="project-menu-item" data-menu-action="down" role="menuitem"${last ? ' disabled' : ''}>Move Down</button>
@@ -86,6 +96,7 @@ export function projectMenuAction(id, action) {
   if (action === 'browse') openProjectFolder(id, 'browse');
   else if (action === 'cmd') openProjectFolder(id, 'cmd');
   else if (action === 'private') toggleProjectPrivate(id);
+  else if (action === 'archive') toggleProjectArchive(id);
   else if (action === 'up') moveProject(id, -1);
   else if (action === 'down') moveProject(id, 1);
   else if (action === 'rename') renameProject(id);
@@ -113,6 +124,39 @@ export async function toggleProjectPrivate(id) {
     );
   } catch (err) {
     toast('Private Failed', err.message);
+  }
+}
+
+/**
+ * Archive hides a project from the active rail. It never touches the folder, the
+ * chat, the plan or the sessions; the project menu's Unarchive brings it back.
+ */
+export async function toggleProjectArchive(id) {
+  const p = state.projects.find((q) => q.id === id);
+  if (!p) return;
+  const chat = newestSession(p);
+  if (!p.archived && chat && (sessionWorking(chat.id) || waitingIn(p.directory))) {
+    closeProjectMenu();
+    toast('Still Working', 'Stop the work and answer anything it is waiting on before archiving it.');
+    return;
+  }
+  const wasCurrent = projectChatOpen(p);
+  closeProjectMenu();
+  try {
+    const res = await api('POST', `/api/projects/${encodeURIComponent(id)}/archive`, { archived: !p.archived });
+    const archived = Boolean(res?.project?.archived);
+    p.archived = archived;
+    await loadProjects({ keepOpen: true });
+    if (archived && wasCurrent) wired.showNothing();
+    renderTree();
+    toast(
+      archived ? 'Project Archived' : 'Project Restored',
+      archived
+        ? `${p.name} is hidden below in Archived. Its folder and chat are untouched.`
+        : `${p.name} is back in the project list.`,
+    );
+  } catch (err) {
+    toast('Could Not Archive The Project', err.message);
   }
 }
 

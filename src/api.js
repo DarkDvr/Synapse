@@ -2106,6 +2106,12 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       return { ...moved, projects: projects.list() };
     },
 
+    /** Hide a project from the active rail, or bring it back. */
+    archiveProject: async (id, body) => {
+      const project = projects.setArchived(id, body?.archived === true || body?.archived === 'true');
+      return { project };
+    },
+
     /**
      * Look at a folder *before* a project is registered there.
      *

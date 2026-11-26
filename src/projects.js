@@ -278,6 +278,10 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
     // The marker lives inside the folder, so this is a fact about the folder, not a
     // record of it (15 Nov).
     private: hasMarker(normalizeDir(p.directory)),
+    // Archive is a registry preference, not a property of the folder: the project,
+    // its chat and its files stay exactly where they are.
+    archivedAt: Number(p.archivedAt) || 0,
+    archived: Number(p.archivedAt) > 0,
   });
 
   /**
@@ -370,7 +374,8 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
    * project was renamed, which is the one moment you are looking for it. */
   function list() {
     const seen = new Set();
-    const out = [];
+    const active = [];
+    const archived = [];
     for (const p of readRaw()) {
       const k = key(p.directory);
       if (seen.has(k)) continue;
@@ -380,9 +385,12 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
       // still names the machine it came from, and a row nobody can open is noise —
       // the operator's rule is that a missing folder fails silently.
       if (!shaped.exists) continue;
-      out.push(shaped);
+      (shaped.archived ? archived : active).push(shaped);
     }
-    return out;
+    // The rail reads active projects first and archived ones at the bottom. The
+    // registry order inside each half is kept: Move Up/Down is about the visible
+    // neighbours, not about an invisible archived row in between.
+    return [...active, ...archived];
   }
 
   /**
@@ -481,14 +489,23 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
       err.status = 404;
       throw err;
     }
+    // Move among peers only. An archived project is not a visible neighbour of an
+    // active one; treating it as one made Move Down at the end of the active list
+    // look like a click that did nothing.
+    const archived = Number(raw[at].archivedAt) > 0;
+    const peers = raw
+      .map((p, index) => ({ p, index }))
+      .filter(({ p }) => (Number(p.archivedAt) > 0) === archived)
+      .map(({ index }) => index);
+    const atPeer = peers.indexOf(at);
     const step = Number(delta) < 0 ? -1 : 1;
-    const to = Math.min(raw.length - 1, Math.max(0, at + step));
+    const toPeer = Math.min(peers.length - 1, Math.max(0, atPeer + step));
+    const to = peers[toPeer];
     if (to === at) return { ok: true, moved: false, at };
     const next = raw.slice();
-    const [row] = next.splice(at, 1);
-    next.splice(to, 0, row);
+    [next[at], next[to]] = [next[to], next[at]];
     writeRaw(next);
-    log.info(`project order: ${row.name || row.directory} moved to position ${to + 1}`);
+    log.info(`project order: ${next[to].name || next[to].directory} moved within ${archived ? 'archived' : 'active'} projects`);
     return { ok: true, moved: true, at: to };
   }
 
@@ -540,5 +557,24 @@ export function createProjectStore({ file, rootDir, legacyGeneralDir = null, har
     return shape({ id: p.id, name: p.name, directory: p.directory, created: p.created });
   }
 
-  return { list, find, create, move, update, remove, setPrivate, idFor, normalizeDir, pruneMissing, discover };
+  /**
+   * Hide a project from the active rail, or bring it back. This is the registry
+   * only: the folder, the plan, the chat and its sessions are untouched.
+   */
+  function setArchived(id, on) {
+    const raw = readRaw();
+    const p = raw.find((q) => (q.id || idFor(q.directory)) === id);
+    if (!p) {
+      const err = new Error('project not found');
+      err.status = 404;
+      throw err;
+    }
+    if (on) p.archivedAt = Date.now();
+    else delete p.archivedAt;
+    writeRaw(raw);
+    log.info(`project ${on ? 'archived' : 'unarchived'}: ${p.name || p.directory}`);
+    return shape(p);
+  }
+
+  return { list, find, create, move, update, remove, setPrivate, setArchived, idFor, normalizeDir, pruneMissing, discover };
 }

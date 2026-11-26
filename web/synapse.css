@@ -459,6 +459,40 @@ body.dark .sidebar .nav-link.active > span:first-child { color: #fff; }
 .project-tree { display: grid; gap: 3px; align-content: start; }
 .tree-project { display: grid; gap: 1px; align-content: start; }
 
+/* Archived projects are still projects: the section is a quiet shelf at the
+   bottom of the rail, closed until the operator asks for it. */
+.tree-archive {
+  margin-top: 8px; padding-top: 5px;
+  border-top: 1px solid var(--line);
+}
+.tree-archive-head {
+  width: 100%; display: flex; align-items: center; gap: 6px;
+  padding: 5px 6px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--muted);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+  text-transform: uppercase; text-align: left; cursor: pointer;
+}
+.tree-archive-head:hover, .tree-archive-head:focus-visible {
+  background: rgba(255, 255, 255, 0.05); color: var(--chat-ink);
+  outline: none;
+}
+.tree-archive-chev {
+  display: inline-block; width: 10px; text-align: center;
+  transition: transform 120ms ease-out;
+}
+.tree-archive.is-open .tree-archive-chev { transform: rotate(90deg); }
+.tree-archive-label { flex: 1; min-width: 0; }
+.tree-archive-count {
+  min-width: 17px; padding: 1px 5px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07); color: var(--muted);
+  font-size: 9px; text-align: center;
+}
+.tree-archive-body { display: grid; gap: 3px; padding-top: 4px; }
+.tree-archive-body[hidden] { display: none; }
+.tree-row.project.is-archived { opacity: 0.58; background: transparent; border-color: rgba(255, 255, 255, 0.04); }
+.tree-row.project.is-archived:hover { opacity: 1; background: rgba(255, 255, 255, 0.04); }
+.tree-row.project.is-archived .tree-open { font-weight: 550; }
+
 .tree-row {
   display: flex; align-items: center; gap: 4px;
   min-width: 0; padding: 0 5px 0 0; border-radius: 8px;

@@ -579,6 +579,11 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       if (seg[2] === 'private' && method === 'POST') {
         return sendJson(res, 200, await api.setProjectPrivate(projectId, await readBody(req)));
       }
+      // Archive: a registry preference only. The folder, chat, plan and sessions
+      // stay exactly where they are.
+      if (seg[2] === 'archive' && method === 'POST') {
+        return sendJson(res, 200, await api.archiveProject(projectId, await readBody(req)));
+      }
       // The project's Single-mode persona. A private project hides it from a LAN
       // view with the rest of its files; a non-private project serves it to
       // either view. The file is inside `.project`, and the save path never logs

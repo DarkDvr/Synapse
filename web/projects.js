@@ -204,32 +204,59 @@ export function projectChatOpen(project) {
   return Boolean(chat && state.view === 'session' && chat.id === state.sessionId);
 }
 
+// The Archived section is a rail preference, not project state: closed by default,
+// and it survives the rail's frequent rebuilds for as long as this page is open.
+let archivedOpen = false;
+
+/** One project row, shared by the active list and the Archived section. */
+function projectRow(p) {
+  const chat = newestSession(p);
+  const current = projectChatOpen(p);
+  const working = Boolean(chat) && sessionWorking(chat.id);
+  const waiting = waitingIn(p.directory);
+  const waitNote =
+    waiting === 'answer' ? ' · waiting on your answer' : waiting === 'decision' ? ' · waiting for your decision' : '';
+  const title = `${p.name}${p.private ? ' · private' : ''}${p.archived ? ' · archived' : ''}${working ? ' · working' : ''}${waitNote}${p.exists === false ? ' · folder missing' : ''}`;
+  return `<div class="tree-project">
+    <div class="tree-row project${current ? ' is-current' : ''}${working ? ' has-work' : ''}${waiting ? ' has-question' : ''}${p.private ? ' is-private' : ''}${p.archived ? ' is-archived' : ''}" data-project-row="${esc(p.id)}">
+      <button class="tree-open" data-project="${esc(p.id)}" title="${esc(title)}">
+        <span class="tree-name">${esc(p.name)}</span>
+      </button>
+      <span class="tree-actions">
+        ${waiting ? `<span class="tree-wait" title="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}" aria-label="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}">?</span>` : ''}
+        ${chat && isStalled(chat.id) ? liveDot(chat.id, { clickable: false }) : ''}
+        <button class="tree-menu" data-menu-project="${esc(p.id)}" title="Project menu" aria-label="Project menu" aria-haspopup="menu">⋯</button>
+      </span>
+    </div>
+  </div>`;
+}
+
+/** Open or close the Archived section. */
+export function toggleArchiveSection() {
+  archivedOpen = !archivedOpen;
+  renderTree();
+  document.querySelector('[data-archive-toggle]')?.focus();
+}
+
 export function renderTree() {
   const el = $('projectTree');
   if (!el) return;
-  const html = state.projects
-    .map((p) => {
-      const chat = newestSession(p);
-      const current = projectChatOpen(p);
-      const working = Boolean(chat) && sessionWorking(chat.id);
-      const waiting = waitingIn(p.directory);
-      const waitNote =
-        waiting === 'answer' ? ' · waiting on your answer' : waiting === 'decision' ? ' · waiting for your decision' : '';
-      const title = `${p.name}${p.private ? ' · private' : ''}${working ? ' · working' : ''}${waitNote}${p.exists === false ? ' · folder missing' : ''}`;
-      return `<div class="tree-project">
-        <div class="tree-row project${current ? ' is-current' : ''}${working ? ' has-work' : ''}${waiting ? ' has-question' : ''}${p.private ? ' is-private' : ''}" data-project-row="${esc(p.id)}">
-          <button class="tree-open" data-project="${esc(p.id)}" title="${esc(title)}">
-            <span class="tree-name">${esc(p.name)}</span>
-          </button>
-          <span class="tree-actions">
-            ${waiting ? `<span class="tree-wait" title="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}" aria-label="${waiting === 'answer' ? 'Waiting on your answer' : 'Waiting for your decision'}">?</span>` : ''}
-            ${chat && isStalled(chat.id) ? liveDot(chat.id, { clickable: false }) : ''}
-            <button class="tree-menu" data-menu-project="${esc(p.id)}" title="Project menu" aria-label="Project menu" aria-haspopup="menu">⋯</button>
-          </span>
-        </div>
-      </div>`;
-    })
-    .join('');
+  const active = state.projects.filter((p) => !p.archived);
+  const archived = state.projects.filter((p) => p.archived);
+  // An open archived project should not be hidden by a closed section.
+  if (archived.some((p) => projectChatOpen(p))) archivedOpen = true;
+  if (!archived.length) archivedOpen = false;
+  let html = active.map(projectRow).join('');
+  if (archived.length) {
+    html += `<div class="tree-archive${archivedOpen ? ' is-open' : ''}" data-archive-section>
+      <button type="button" class="tree-archive-head" data-archive-toggle aria-expanded="${archivedOpen ? 'true' : 'false'}" aria-controls="archivedProjects">
+        <span class="tree-archive-chev" aria-hidden="true">›</span>
+        <span class="tree-archive-label">Archived</span>
+        <span class="tree-archive-count">${archived.length}</span>
+      </button>
+      <div class="tree-archive-body" id="archivedProjects"${archivedOpen ? '' : ' hidden'}>${archived.map(projectRow).join('')}</div>
+    </div>`;
+  }
   // The rail is rebuilt on every poll and every event. Writing identical markup
   // restarts the working row's yellow animation from zero, which the operator sees
   // as a stutter every few seconds (reported 21 Nov). The markup only changes when a
@@ -246,9 +273,13 @@ export function renderTree() {
 export function renderEmpty() {
   const note = $('emptyNote');
   if (!note) return;
-  note.textContent = state.projects.length
+  const active = state.projects.some((p) => !p.archived);
+  const archived = state.projects.some((p) => p.archived);
+  note.textContent = active
     ? 'Pick a project in the left rail to open its conversation.'
-    : 'A project is a folder. Make one and its conversation opens here.';
+    : archived
+      ? 'Every project is archived. Open Archived below the project list to restore one.'
+      : 'A project is a folder. Make one and its conversation opens here.';
 }
 
 /** A project's one conversation. With no chat yet, the first open makes one. */
