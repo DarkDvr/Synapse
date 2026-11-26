@@ -17,6 +17,9 @@ export const PERSONA_MAX_TEXT = 2000;
 
 let loading = null;
 let loadingFor = '';
+// A save or a project switch invalidates a load already in flight. Without this
+// a slow GET could land after a Remove and put the old voice back on the card.
+let personaSeq = 0;
 
 const pathFor = (id) => `/api/projects/${encodeURIComponent(id)}/persona`;
 
@@ -59,6 +62,9 @@ export function renderPersonaCard() {
 export async function loadPersona({ force = false } = {}) {
   const project = currentProject();
   if (!project?.id) {
+    personaSeq += 1;
+    loading = null;
+    loadingFor = '';
     state.persona = null;
     state.personaFor = null;
     renderPersonaCard();
@@ -70,6 +76,7 @@ export async function loadPersona({ force = false } = {}) {
     renderPersonaCard();
     return state.persona;
   }
+  const ticket = ++personaSeq;
   state.persona = null;
   state.personaFor = id;
   renderPersonaCard();
@@ -77,14 +84,14 @@ export async function loadPersona({ force = false } = {}) {
   loading = (async () => {
     try {
       const out = await api('GET', pathFor(id));
-      if (currentProject()?.id !== id) return null;
+      if (ticket !== personaSeq || currentProject()?.id !== id) return null;
       state.persona = out?.persona || null;
     } catch {
       // No persona, a private view, or an older server: all mean "no persona".
-      if (currentProject()?.id === id) state.persona = null;
+      if (ticket === personaSeq && currentProject()?.id === id) state.persona = null;
     } finally {
-      if (loadingFor === id) loading = null;
-      if (currentProject()?.id === id) {
+      if (ticket === personaSeq && loadingFor === id) loading = null;
+      if (ticket === personaSeq && currentProject()?.id === id) {
         state.personaFor = id;
         renderPersonaCard();
       }
@@ -96,6 +103,9 @@ export async function loadPersona({ force = false } = {}) {
 
 /** Drop the card's name when the chat or the project closes. */
 export function clearPersonaState() {
+  personaSeq += 1;
+  loading = null;
+  loadingFor = '';
   state.persona = null;
   state.personaFor = null;
   renderPersonaCard();
@@ -109,7 +119,12 @@ export function clearPersonaState() {
  * caller owns the toast, so a skills save and a persona save report once.
  */
 export async function savePersona(projectId, body) {
+  // Any GET already in flight is now older than this decision.
+  const ticket = ++personaSeq;
+  loading = null;
+  loadingFor = '';
   const out = await api('PUT', pathFor(projectId), body || { name: '', instructions: '' });
+  if (ticket !== personaSeq) return state.persona;
   state.persona = out?.persona || null;
   state.personaFor = projectId;
   renderPersonaCard();

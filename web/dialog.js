@@ -178,13 +178,17 @@ export function openDialog({
             </span>
           </label>`;
         }
+        // A field's help can be a line under it (`hint`, with its yellow arrow)
+        // or a hover sentence (`tip`). The role dialog uses the tooltip so the
+        // form stays quiet; the rename dialog keeps its visible line.
+        const tip = f.tip ? ` title="${esc(f.tip)}"` : '';
         const control = f.type === 'select'
-          ? `<select id="dlg-${esc(f.name)}">${f.options
+          ? `<select id="dlg-${esc(f.name)}"${tip}>${f.options
               .map((o) => `<option value="${esc(o.v)}"${o.v === f.value ? ' selected' : ''}>${esc(o.l)}</option>`)
               .join('')}</select>`
           : f.type === 'textarea'
-            ? `<textarea id="dlg-${esc(f.name)}" rows="4" placeholder="${esc(f.placeholder ?? '')}">${esc(f.value ?? '')}</textarea>`
-            : `<input id="dlg-${esc(f.name)}" type="text" value="${esc(f.value ?? '')}" placeholder="${esc(f.placeholder ?? '')}" />`;
+            ? `<textarea id="dlg-${esc(f.name)}" rows="4" placeholder="${esc(f.placeholder ?? '')}"${tip}>${esc(f.value ?? '')}</textarea>`
+            : `<input id="dlg-${esc(f.name)}" type="text" value="${esc(f.value ?? '')}" placeholder="${esc(f.placeholder ?? '')}"${tip} />`;
         // A hint under a plain field: the rename dialog uses it to say what the
         // folder name will do, and the path it will become (12 Nov).
         const hint = f.hint ? `<small class="dlg-hint" data-hint-for="${esc(f.name)}">${esc(f.hint)}</small>` : '';

@@ -260,8 +260,8 @@ export async function editRoleSettings(roleId) {
       type: 'text',
       label: 'Persona name (Single mode only)',
       value: persona?.name || '',
-      placeholder: 'Vekra',
-      hint: 'The name on the Architect card in Single mode. Optional; without one the card stays “Architect”.',
+      placeholder: 'Persona Name',
+      tip: 'The name on the Architect card in Single mode. Optional; without one the card stays “Architect”.',
     });
   }
   fields.push({
@@ -271,10 +271,8 @@ export async function editRoleSettings(roleId) {
       ? 'Instructions / Persona for this role (Single mode only)'
       : 'Instructions for this role',
     value: entry.instructions || '',
-    placeholder: isPersona
-      ? 'You are Vekra, the Architect for this project. Call me Andrew. Strict and professional about the work, dryly playful with me...'
-      : 'Anything it should remember every turn. Optional.',
-    hint: isPersona
+    placeholder: isPersona ? '' : 'Anything it should remember every turn. Optional.',
+    tip: isPersona
       ? 'This replaces the global Architect instructions for this project in Single mode. Multi keeps the global block.'
       : '',
   });

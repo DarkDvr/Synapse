@@ -3989,7 +3989,12 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
 .mode-note-compact {
   align-self: flex-start; font-size: 11px; line-height: 1.2;
   padding: 3px 9px; margin-top: 1px;
+  background: #24262b; border: 1px solid rgba(237, 194, 90, 0.62); color: var(--yellow);
 }
+.mode-note-compact:hover:not(:disabled) {
+  background: rgba(237, 194, 90, 0.12); border-color: var(--yellow); color: #fff;
+}
+.mode-note-compact:focus-visible { outline: 2px solid var(--orange); outline-offset: 1px; }
 
 /* A row that has just appeared slides up into place, instead of existing between two
    frames. The renderer decides which rows are new and how far into their slide a rebuilt

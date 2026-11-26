@@ -6,7 +6,7 @@ import { installPage } from './fake-page.mjs';
 
 installPage();
 const { state } = await import('../web/state.js');
-const { architectLabel, loadPersona, renderPersonaCard } = await import('../web/persona.js');
+const { architectLabel, loadPersona, savePersona, renderPersonaCard } = await import('../web/persona.js');
 import { ICONS } from '../web/icons.js';
 import { setModeNote, clearModeNote, modeNoteHtml } from '../web/mode-note.js';
 
@@ -109,6 +109,41 @@ test('loadPersona reads the open project and clears on a null answer', async () 
     });
     await loadPersona({ force: true });
     assert.equal(state.persona, null);
+  } finally {
+    globalThis.fetch = oldFetch;
+    state.projects = [];
+    state.sessionId = null;
+    state.persona = null;
+    state.personaFor = null;
+  }
+});
+
+test('a persona load that lands after a remove cannot put the voice back', async () => {
+  const oldFetch = globalThis.fetch;
+  state.projects = [{ id: 'p-race', directory: 'F:/p-race', sessions: [{ id: 's-race' }] }];
+  state.sessionId = 's-race';
+  state.persona = null;
+  state.personaFor = null;
+  let release = () => {};
+  const response = (obj) => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    text: async () => JSON.stringify(obj),
+  });
+  try {
+    globalThis.fetch = async (url, opts) => {
+      if (String(opts?.method || 'GET') === 'PUT') return response({ persona: null });
+      return new Promise((resolve) => {
+        release = () => resolve(response({ persona: { name: '', instructions: 'Only a voice.' } }));
+      });
+    };
+    const loading = loadPersona({ force: true });
+    await new Promise((r) => setTimeout(r, 0));
+    await savePersona('p-race', null);
+    release();
+    await loading;
+    assert.equal(state.persona, null, 'the late GET overwrote the remove');
   } finally {
     globalThis.fetch = oldFetch;
     state.projects = [];
