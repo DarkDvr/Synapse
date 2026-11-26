@@ -1138,8 +1138,9 @@ async function loadMessages() {
     // after it. Dropping the second one put the steer back under the thinking pane
     // until the engine committed the next assistant step (26 Nov).
     const localLive = (state.messages || []).filter((m) => String(m?.id || '').startsWith('local-live-'));
-    const echoed = new Set(loaded.map((m) => String(m.text || '')));
-    const keptPending = pending.filter((m) => !echoed.has(String(m.text || '')));
+    const marker = (m) => String(m?.text || '').replace(/\s+/g, ' ').trim();
+    const echoed = new Set(loaded.map(marker));
+    const keptPending = pending.filter((m) => !echoed.has(marker(m)));
     const steerWaiting = keptPending.length > 0;
     const live = localLive.filter((m) => {
       if (m.afterSteer) return steerWaiting || !(tail && tail.type === 'assistant');
@@ -1153,6 +1154,19 @@ async function loadMessages() {
       ...keptPending,
       ...afterLive,
     ];
+    // The engine's own `[steer]` message is the read receipt. The /steer request
+    // can return while the previous tool is still streaming (26 Nov), so it is not
+    // proof; this is. When the echo lands at the end of the transcript, open the
+    // next post now so the steer moves above the pane at the read, not after the
+    // following step completes.
+    const wanted = new Set(pending.map(marker));
+    const earliest = pending.length ? Math.min(...pending.map((m) => Number(m.created) || 0)) : 0;
+    const readSteer =
+      pending.length > 0 &&
+      loaded.some(
+        (m) => m.type === 'user' && wanted.has(marker(m)) && (Number(m.created) || 0) >= earliest - 1000,
+      );
+    if (readSteer && (state.busy || state.streaming || busyNow(id))) ensureLivePost(true);
     // The chips on tool calls are a record that outlives the request, so a
     // transcript opened after the fact asks once. While the session is open they
     // arrive on the stream; this is only the catch-up.
@@ -2883,7 +2897,7 @@ async function bootPage() {
   });
   // The dock asks the app to reload the conversation, the cards that are waiting, the
   // compact chip and the rail.
-  composerWiring({ loadMessages, refreshPending, renderCompactChip, renderTree, ensureLivePost });
+  composerWiring({ loadMessages, refreshPending, renderCompactChip, renderTree });
   // The question post asks the app how long an answer waits, and tells it to refresh
   // the waiting cards and the rail.
   askPanelWiring({ answerWaitSec, refreshPending, renderTree, loadMessages });

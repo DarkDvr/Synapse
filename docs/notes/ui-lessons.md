@@ -256,11 +256,12 @@ clock and picker joined into one row.
   trace *before* the request, marked `pending`; a purple dot breathes beside the
   `STEER:` tag, and the rule goes faint, until the model has it. The dot is the same
   "this is still happening" mark a compaction wears, in the operator's own colour —
-  the tag alone was too quiet to see. For the Architect the request returns at the
-  engine's next step, and the page opens the next post at that moment so the steer
-  moves above the thinking pane *then*, not when the step ends. A worker reports
-  `run.steer` twice — once when the server took it, once with `delivered` when the
-  worker reached the boundary where it reads it. Only the second ends the breath. A
+  the tag alone was too quiet to see. For the Architect the engine's own `[steer]`
+  message is the read receipt; the page opens the next post when it lands, so the
+  steer moves above the thinking pane *then*, not when the next step ends. A worker
+  reports `run.steer` twice — once when the server took it, once with `delivered`
+  when the worker reached the boundary where it reads it. Only the second ends the
+  breath. A
   refusal takes the line off with a toast, and confirmation **adopts** that line
   instead of pushing a second one. A file-only steer has no sentence: the tag and
   its chip are the whole line, and it is still a steer. `steerLine()` in `traces.js`

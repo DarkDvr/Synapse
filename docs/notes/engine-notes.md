@@ -375,12 +375,13 @@ records the evidence, and wakes the Architect.
   so waiting left the chat silent for minutes after the button (4 Nov). The run line is pushed, journalled
   and broadcast at the press; the prompt is awaited in the background, and a refusal takes the line back
   with a toast. An Architect steer paints the sentence at once, with a purple dot
-  breathing beside it. When the prompt returns, the page opens the next Architect post
-  then, so the steer moves above the thinking pane at the read rather than at the end
-  of the step. A second `run.steer` with `delivered: true` follows for a worker, which
-  is the boundary where it reads it; that is what ends the UI's breathing, not the first
-  event. A file-only steer is the same path with an empty sentence: the marker is
-  `[steer]`, the files carry it, and `runs.steer` accepts it.
+  breathing beside it. The engine's own `[steer]` message is the read receipt; when it
+  lands the page opens the next Architect post, so the steer moves above the thinking
+  pane at the read rather than at the end of the step. A second `run.steer` with
+  `delivered: true` follows for a worker, which is the boundary where it reads it; that
+  is what ends the UI's breathing, not the first event. A file-only steer is the same
+  path with an empty sentence: the marker is `[steer]`, the files carry it, and
+  `runs.steer` accepts it.
 - **An automatic answer is not the operator speaking.** After Auto-Answer replies, a synthetic line says
   the operator is away and the harness chose the recommended options, because without it the next turn
   reasoned about a decision nobody had made.

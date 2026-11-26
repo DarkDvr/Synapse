@@ -456,6 +456,7 @@ test('the composer says what a steer will do', () => {
 
 test('a steer is painted before the request, and breathes until it is read', () => {
   const composer = fs.readFileSync(path.join(process.cwd(), 'web', 'composer.js'), 'utf8');
+  const page = fs.readFileSync(path.join(process.cwd(), 'web', 'app.js'), 'utf8');
   const transcript = fs.readFileSync(path.join(process.cwd(), 'web', 'transcript.js'), 'utf8');
   const css = fs.readFileSync(path.join(process.cwd(), 'web', 'synapse.css'), 'utf8');
   const steerStart = composer.indexOf('async function sendSteer');
@@ -466,7 +467,8 @@ test('a steer is painted before the request, and breathes until it is read', () 
   assert.ok(request > 0, 'the steer is still sent to the server');
   assert.ok(paint < request, 'the post is on screen before the request that can take minutes');
   assert.match(composer, /pending: true/, 'the new post starts pending');
-  assert.match(composer, /delete post\.pending/, 'the breath ends when the request comes back');
+  assert.doesNotMatch(composer, /delete post\.pending/, 'the request is treated as proof of the read');
+  assert.match(page, /readSteer/, 'the page does not watch for the engine echo');
   assert.match(transcript, /is-pending/);
   assert.match(css, /steer-breathe/);
   assert.match(css, /\.trace-line\.is-steer\.is-pending \.msg-steer/);

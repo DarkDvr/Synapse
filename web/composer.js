@@ -5,9 +5,8 @@
 // about what must not happen: a message that failed is a red line in the chat and not
 // a toast, Stop is gentle first, and a steer is never silently dropped.
 //
-// Five things come from app.js and are wired at boot: reload the messages, refresh the
-// cards that are waiting, redraw the compact chip, the project rail, and open the post a
-// just-read steer moves above.
+// Four things come from app.js and are wired at boot: reload the messages, refresh the
+// cards that are waiting, redraw the compact chip and the project rail.
 import { state } from './state.js';
 import { esc, fmtBytes, shortName } from './format.js';
 import { $ } from './dom.js';
@@ -28,7 +27,6 @@ const wired = {
   refreshPending: missing('refreshPending'),
   renderCompactChip: missing('renderCompactChip'),
   renderTree: missing('renderTree'),
-  ensureLivePost: missing('ensureLivePost'),
 };
 
 /** Hand this module the four things that live in app.js. Called once, at boot. */
@@ -347,15 +345,11 @@ async function sendSteer(text, files, target) {
       if (Array.isArray(sent?.files) && sent.files.length) painted.files = sent.files;
       renderTranscript();
     }
-    if (post) {
-      // The Architect's prompt came back, which is the engine's next step: the
-      // model has the steer now, so the breath can stop. Opening the next post here
-      // — rather than waiting for its first token — is what moves the steer above
-      // the thinking pane at the read, not one step later.
-      delete post.pending;
-      wired.ensureLivePost(true);
-      renderTranscript();
-    }
+    // An Architect steer stays pending here even after the request returns. The
+    // request is an acknowledgement, not proof of the read: the engine's own
+    // `[steer]` message is that proof, and loadMessages moves the line when it
+    // sees it. (26 Nov: the request came back while the previous tool was still
+    // streaming, so opening the next post here moved the steer too early.)
     toast(
       'Steer Sent',
       sent?.target === 'worker'
@@ -364,11 +358,6 @@ async function sendSteer(text, files, target) {
     );
     if (sent?.target !== 'worker') {
       await wired.loadMessages();
-      // The reload may have dropped the page's post (a transcript fetch that landed
-      // before the engine wrote the next assistant message). Put it back after the
-      // steer so the pane stays below the line the operator just sent.
-      if (post) wired.ensureLivePost(true);
-      renderTranscript();
       scrollChatToEnd();
     }
   } catch (err) {

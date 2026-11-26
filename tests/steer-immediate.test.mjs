@@ -55,7 +55,10 @@ test('the page and the runner agree on the line, so one steer is one line', () =
   // The first event only says the server took it. The breath ends on the second,
   // when the worker reaches the boundary where it reads the steer.
   assert.match(body, /const sent = await api/, 'the steer is still sent');
-  assert.match(body, /wired\.ensureLivePost\(true\)/, 'the read does not move the steer above the next post');
+  assert.doesNotMatch(body, /delete post\.pending/, 'the request is treated as proof of the read');
+  const page = read('web/app.js');
+  assert.match(page, /const readSteer =/, 'the page does not wait for the engine echo');
+  assert.match(page, /readSteer && .*ensureLivePost\(true\)/, 'the echo does not move the steer above the next post');
   const runs = read('web/live-runs.js');
   assert.match(runs, /const existing = trace\.notes\.find\(\(n\) => n\?\.steer && n\.text === line\)/, 'the runner pushes a duplicate');
   assert.match(runs, /if \(ev\.delivered\) delete existing\.pending/, 'the runner never confirms the painted line');

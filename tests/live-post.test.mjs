@@ -44,6 +44,10 @@ check(
   /afterSteer: true/.test(app) && /m\.afterSteer/.test(app),
 );
 check(
+  'the engine echo is what opens the post after the steer, not the request',
+  /const readSteer =/.test(app) && /readSteer && .*ensureLivePost\(true\)/.test(app),
+);
+check(
   'the placeholder is kept until the transcript ends with the engine\'s own message',
   /tail && tail\.type === 'assistant'/.test(app) && /startsWith\('local-live-'\)/.test(app),
 );
