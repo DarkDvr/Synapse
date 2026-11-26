@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { withinWindow, cacheShare, lastPromptOf, noteArchitectCompaction, noteArchitectUsage, rateViewWiring, noteDelta, noteWorkerUsage, resetRate, forgetUsageSamples, sessionRate, rateText } from '../web/rate-view.js';
+import { withinWindow, cacheShare, lastPromptOf, noteArchitectCompaction, noteArchitectUsage, rateViewWiring, noteDelta, noteStepStart, writingWindowMs, noteWorkerUsage, resetRate, forgetUsageSamples, sessionRate, rateText } from '../web/rate-view.js';
 import { getRoleRate } from '../web/role-rate-store.js';
 import { state } from '../web/state.js';
 import { promptParts } from '../src/runs.js';
@@ -132,6 +132,38 @@ test('the speed window ends with the tool call the step wrote', () => {
     /EV\.toolInputStarted \|\| ev\.type === EV\.toolInputEnded\) noteDelta\(ev\)/,
     'the tool-input events are part of the writing window',
   );
+});
+
+test('a buffered step uses its own clock; a tool step keeps its stream window', () => {
+  // A server that releases a whole step at the end exposes 139 s of a 1,083 s
+  // step; the card should read 29.5 tok/s, not 230.
+  assert.equal(writingWindowMs(139_000, 1_083_000, false), 1_083_000);
+  // A tool's execution time is inside the step but is not the model writing.
+  assert.equal(writingWindowMs(139_000, 1_083_000, true), 139_000);
+  // A window that is most of the step is already the measurement.
+  assert.equal(writingWindowMs(600_000, 1_000_000, false), 600_000);
+  assert.equal(writingWindowMs(0, 1_000_000, false), 0);
+});
+
+test('a step start is the clock the sample falls back to', () => {
+  noteStepStart('buffered', Date.now() - 5_000);
+  // No measured window: there is no sample either, but the start is remembered.
+  assert.equal(writingWindowMs(0, 5_000, false), 0);
+});
+
+test('a buffered Architect step is measured against its own clock', async () => {
+  wire();
+  state.sessionId = 'arch_buffered';
+  noteArchitectUsage({ sessionId: 'arch_buffered', raw: { data: { tokens: { input: 10, output: 100 } } } });
+  noteStepStart('arch_buffered', Date.now() - 5_000);
+  noteDelta({ sessionId: 'arch_buffered' });
+  await new Promise((r) => setTimeout(r, 450));
+  noteDelta({ sessionId: 'arch_buffered' });
+  noteArchitectUsage({ sessionId: 'arch_buffered', raw: { data: { tokens: { input: 10, output: 200 } } } });
+  const rec = sessionRate('arch_buffered');
+  assert.ok(rec, 'the step became a sample');
+  assert.equal(rec.tokens, 100);
+  assert.ok(rec.ms >= 4_000, `the step clock is the denominator (${rec.ms}ms)`);
 });
 
 test('a reconnect re-baselines the speed instead of adding two steps', () => {

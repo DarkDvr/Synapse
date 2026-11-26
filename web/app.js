@@ -58,6 +58,7 @@ import {
   forgetUsageSamples,
   noteArchitectUsage,
   noteArchitectCompaction,
+  noteStepStart,
   lastPromptOf,
   noteWorkerUsage,
   paintRates,
@@ -1915,6 +1916,9 @@ function connectStream() {
       }
     }
     const mine = !ev.sessionId || ev.sessionId === state.sessionId;
+    // Every role's step opens the same clock for the speed sample: a worker's
+    // session is not the open one, but its rate still lands on its card.
+    if (ev.sessionId && ev.type === EV.stepStarted) noteStepStart(ev.sessionId);
     // A worker's session is not the open one, so nothing of it renders through
     // `mine`. Its words and its thinking stream in here instead, and its steps
     // become the one-line notes in the trace.
@@ -1959,6 +1963,10 @@ function connectStream() {
         state.wait = waitRetry(state.wait, retryWaitInfo(ev, serverNow()));
         stopWaitMetrics();
         tickWait();
+      } else if (ev.type === EV.toolInputStarted || ev.type === EV.toolInputEnded) {
+        // Tool arguments are output too; count them in the writing window and mark
+        // the step as one whose wall time includes work that is not writing.
+        noteDelta(ev);
       } else if (ev.type === EV.textEnded || ev.type === EV.reasoningEnded) {
         endStream();
       } else if (turnOver(ev.type)) {

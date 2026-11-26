@@ -6,6 +6,7 @@
 // the maths, the memory of the current step and the paint of the card all describe
 // one number.
 import { state } from './state.js';
+import { EV } from './events.js';
 import { addSample, rateOf } from './rate.js';
 import { clearRoleRate, getRoleRate, loadRoleRates, rememberRoleRate, roleRateKey } from './role-rate-store.js';
 
@@ -53,6 +54,31 @@ const deltaWindow = new Map(); // sessionId -> { first, last }
 const usageTotals = new Map(); // dirKey -> tokens written so far in this run
 const sessionTotals = new Map(); // sessionId -> tokens written so far, whoever owns it
 const sessionRates = new Map(); // sessionId -> { tokens, ms, at } — a rate that keeps
+const stepStarts = new Map(); // sessionId -> when the engine opened the step
+const stepTools = new Set(); // sessions whose step has a tool call (not pure writing)
+
+/**
+ * The engine has opened a new step. The rate uses this only as a sanity bound:
+ * a provider that buffers the whole step can make the delta window a small
+ * fraction of the real writing time.
+ */
+export function noteStepStart(sessionId, at = Date.now()) {
+  if (!sessionId) return;
+  stepStarts.set(sessionId, at);
+  stepTools.delete(sessionId);
+}
+
+/** The denominator for a step's rate. See the measurement below. */
+export function writingWindowMs(windowMs, stepMs, toolStep = false) {
+  const w = Number(windowMs) || 0;
+  const s = Number(stepMs) || 0;
+  if (!w) return 0;
+  // A window under half the step is not a measurement of the writing; it is the
+  // part of the step a buffered stream happened to expose. A tool's own running
+  // time is the exception, and keeps its shorter window.
+  if (!toolStep && s > w * 2) return s;
+  return w;
+}
 
 /**
  * Add one step's writing to a session's tally and keep the resulting rate.
@@ -75,11 +101,23 @@ function measureSession(sessionId, ev, { consumeWindow = true } = {}) {
   // reset): this step is the new baseline, not a sample from a negative gap.
   if (prev === undefined || written < prev) {
     sessionTotals.set(sessionId, written);
+    stepStarts.delete(sessionId);
+    stepTools.delete(sessionId);
     return null;
   }
   sessionTotals.set(sessionId, written);
   if (written === prev) return null;
-  const ms = w ? w.last - w.first : 0;
+  const started = stepStarts.get(sessionId);
+  const toolStep = stepTools.has(sessionId);
+  stepStarts.delete(sessionId);
+  stepTools.delete(sessionId);
+  // The delta window is the model's writing time, but some servers buffer a whole
+  // step and release it at the end: the window then covers only the last burst,
+  // while the step took twenty minutes. When the window is less than half the step
+  // and no tool ran, the step's own clock is the honest denominator. A tool step
+  // keeps the delta window, because the tool's execution is not model writing.
+  const stepMs = started ? Math.max(0, Date.now() - started) : 0;
+  const ms = writingWindowMs(w ? w.last - w.first : 0, stepMs, toolStep);
   if (!ms || ms < 400) return null;
   const step = written - prev;
   const rec = sessionRates.get(sessionId) || { tokens: 0, ms: 0, at: 0 };
@@ -110,6 +148,9 @@ export function sessionRate(sessionId) {
 
 export function noteDelta(ev) {
   if (!ev.sessionId) return;
+  // A tool call's arguments are output too, but the tool's execution is not
+  // writing. Mark the step so its shorter window is not replaced by wall time.
+  if (ev.type === EV.toolInputStarted || ev.type === EV.toolInputEnded) stepTools.add(ev.sessionId);
   const w = deltaWindow.get(ev.sessionId) || { first: 0, last: 0 };
   const now = Date.now();
   if (!w.first) w.first = now;
@@ -137,6 +178,8 @@ export function resetRate(run) {
 export function forgetUsageSamples() {
   usageTotals.clear();
   deltaWindow.clear();
+  stepStarts.clear();
+  stepTools.clear();
   // The shown rate stays: it is the last thing the model was measured at, and the
   // operator asked for it to keep until a new one is measured (16 Nov).
   sessionTotals.clear();

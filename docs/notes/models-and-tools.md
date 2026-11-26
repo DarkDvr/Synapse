@@ -397,6 +397,12 @@ Two later corrections to the same window:
 - **an event lost with the stream was a second step divided by one step's time.**
   `forgetUsageSamples()` re-baselines on reconnect: the next usage event becomes the
   baseline and no sample is taken across the gap.
+- **a buffered step is not a fast one** (26 Nov). A local server can release a whole
+  step's stream at the end: a 1,083-second step showed 139 seconds of deltas, so 32,000
+  output tokens read 230 tok/s while the server's own pace was about 35. The step's
+  own clock is now the denominator when the delta window is less than half of it and
+  no tool ran; a tool step keeps the shorter window because the tool's execution is
+  not model writing. `writingWindowMs` in `web/rate-view.js` owns the rule.
 
 ## A provider's error wears its own clothes
 
