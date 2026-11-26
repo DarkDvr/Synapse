@@ -794,13 +794,14 @@ run — so they get `Allow Screen` / `Allow Sign-In` and **no Always Allow**.
   size and the name 0.888, and `align-items: center` centres boxes, so two line boxes of
   different heights sat about a pixel apart. One size, and the name's baseline is the
   target's to the pixel (measured: both 10.92px in a 16.38px box, same top).
-- **Alignment is the baseline, not a number.** The steer's "You" was nudged twice, by a
-  pixel and then 0.23em, and each time it looked right at the size measured and wrong at
-  the next: the gap between a box's centre and an uppercase word's visual centre depends on
-  the font *and* the chat size. The row is a flex row with `align-items: baseline` and the
-  label a plain inline box; the only correction left is 4% of the type size below the
-  baseline, the same fraction at every size. Chips and the Reuse pill centre on the line,
-  because a bordered box has no baseline worth trusting.
+- **Alignment is the baseline, not a number — and some rows should not be one row.** The
+  steer's "You" was nudged twice, by a pixel and then 0.23em, and each time it looked right
+  at the size measured and wrong at the next: the gap between a box's centre and an
+  uppercase word's visual centre depends on the font *and* the chat size. A flex row with
+  `align-items: baseline` was the best answer while "You" and the sentence shared a line.
+  It was still the wrong shape: `You` now takes its own header line like Architect and
+  Synapse, and the sentence starts below it, so there is no shared baseline left to
+  correct (26 Nov).
 - **One chevron for every fold:** `▸`/`▾` at 1.3em, line-height 1.15, in the same absolute
   16px slot, so the first glyph of an alarm is on the column of every other fold's first
   glyph. A 0.8em marker in the line's flow was a speck beside a red word and pushed the

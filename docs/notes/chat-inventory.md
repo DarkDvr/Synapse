@@ -43,9 +43,9 @@ Ids are stable: they are the ticket and scenario names. `M` = must, `P` = pain t
 
 | Id | Comes from | What appears | Must (M) / Pain (P) |
 |---|---|---|---|
-| A1 | a `user` message | violet rule, "You", time, the sentence | M: same spine and header as every post; text selectable; time on the header line at every size |
-| A2 | text starting `[steer]` | the same post with a "STEER:" tag | M: tag on the first line, sharing a baseline; wrapping is the sentence's; a file-only steer is the tag plus its chip; a purple dot breathes until the model reads it, then the next post opens below the steer |
-| A3 | files on a message | chips: type tag, name, hover picture, click opens | M: chips do not disturb the baseline; a picture is a chip, never a thumbnail in the flow |
+| A1 | a `user` message | violet rule, "You", time, the sentence | M: same spine and header as every post; "You" and the time own the first line, the sentence starts below; text selectable; time on the header line at every size |
+| A2 | text starting `[steer]` | the same post with a "STEER:" tag | M: tag at the start of the sentence below the header; wrapping is the sentence's; a file-only steer is the tag plus its chip; a purple dot breathes until the model reads it, then the next post opens below the steer |
+| A3 | files on a message | chips: type tag, name, hover picture, click opens | M: chips sit below the sentence and never squeeze it; a picture is a chip, never a thumbnail in the flow |
 | A4 | a message just sent, not yet in the engine | the operator's post already there | M: the engine's copy replaces it with no flash, no duplicate, no lost scroll |
 | A5 | an `assistant` message | green rule, "Architect", time, blocks | M: the same shape live or finished — no second block, no second head |
 | A6 | the turn starting | a post with "Thinking…" | M: opens on the first token; never left behind when the turn ends without a message |
@@ -172,7 +172,7 @@ Ids are stable: they are the ticket and scenario names. `M` = must, `P` = pain t
 | Id | Invariant |
 |---|---|
 | K1 | one left spine: every rule, line, card and fold starts on the same x; text on one inset from it |
-| K2 | the header is one line: role and time share a baseline at every chat font size. P: "You" and the sentence sit on different baselines at some sizes |
+| K2 | the header is one line: role and time share a baseline at every chat font size; the body starts below it. P: a `You` row that shared the sentence's baseline could not be aligned at every size (fixed 26 Nov) |
 | K3 | spacing is in line units (¼, ½, 1, 2), not ad-hoc pixels. P: the Compacting line's inset does not match a post's |
 | K4 | both layouts (wide, stacked), the zoom control and every font size are the same design, measured at 1280/1460/1600 |
 | K5 | no horizontal scrollbar ever; the scrollbar gutter is stable; long words wrap or scroll inside their own block |

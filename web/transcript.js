@@ -546,19 +546,19 @@ export function renderMessage(m, tail = '', extras = '') {
     // "You" with a yellow STEER: prefix, so the difference is visible at a glance.
     const steer = String(m.text || '').match(/^\[steer\]\s*([\s\S]*)$/);
     const said = steer ? steer[1] : m.text;
-    // The tag lives inside the text span, not beside it: it is a prefix to the
-    // sentence, so the browser aligns it with the first line by itself instead of
-    // a flex row's top edge lifting a 9.5px word above a 13.5px one (30 Oct).
-    // A purple dot breathes beside it while the steer has not been read — the
-    // same "something is happening" mark a compaction gets, in the operator's own
-    // colour (26 Nov).
+    // The tag lives at the start of the sentence, not in the header: it belongs to
+    // the words. A purple dot breathes beside it while the steer has not been read —
+    // the same "something is happening" mark a compaction gets, in the operator's
+    // own colour (26 Nov).
     const pending = m.pending ? ' is-pending' : '';
     const dot = steer && m.pending ? '<span class="steer-dot" aria-hidden="true"></span>' : '';
     const lead = steer ? `${dot}<span class="msg-steer">STEER:</span> ` : '';
-    // A steer the page painted before the engine had read it breathes until the
-    // engine's own message lands (or the steer request returns, for the Architect).
+    // The speaker is its own line, the way Architect and Synapse are. The old row
+    // put "You" and the sentence on one baseline, which was a vertical-alignment
+    // problem with no right answer at every chat size (26 Nov).
     return `<div class="msg user${steer ? ' is-steer' : ''}${pending}"${line} data-msg="user"><div class="msg-body">
-      ${stamp}<span class="msg-role">You</span><span class="msg-text">${lead}${esc(said)}</span>${chips}${reuse}
+      <div class="msg-head"><span class="msg-role">You</span><span class="msg-head-right">${reuse}${stamp}</span></div>
+      <div class="msg-text">${lead}${esc(said)}</div>${chips}
     </div></div>`;
   }
   if (m.type === 'synthetic') {

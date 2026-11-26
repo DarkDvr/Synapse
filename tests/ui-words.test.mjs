@@ -146,17 +146,17 @@ contract('a sent message can be put back in the composer', () => {
   assert.match(read('web/synapse.css'), /\.msg-reuse\s*\{/);
 });
 
-contract('a You message keeps its parts on one baseline', () => {
+contract('a You message gives the speaker its own line', () => {
+  const js = ui();
   const css = read('web/synapse.css');
-  assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*display: flex/);
-  // Alignment is the font's baseline, not a nudge: a fixed 1.5em box or a pixel offset was
-  // right at one chat size and wrong at the next (13 Nov, after three attempts).
-  assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*align-items: baseline/);
-  assert.match(css, /\.msg\.user \.msg-role\s*\{[^}]*vertical-align: baseline/);
-  // The clock is last in the row (it is first in the markup), and the attachment chips
-  // take the line after it so they cannot squeeze the text (20 Nov).
-  assert.match(css, /\.msg\.user \.msg-time\s*\{[^}]*order: 5/);
-  assert.match(css, /\.msg\.user \.msg-files \{[^}]*order: 6/);
+  assert.match(js, /class="msg-head"/, 'the post has no header row');
+  assert.match(css, /\.msg\.user \.msg-body\s*\{[^}]*display: block/, 'the post is not a block');
+  assert.match(css, /\.msg\.user \.msg-head\s*\{[^}]*display: flex/, 'the header is not its own row');
+  assert.match(css, /\.msg\.user \.msg-head-right\s*\{[^}]*margin-left: auto/, 'the time and Reuse are not at the right');
+  assert.match(css, /\.msg\.user \.msg-text\s*\{[^}]*display: block/, 'the sentence does not start below');
+  // The old row is gone: the point is to stop solving baseline alignment at every
+  // chat size (26 Nov).
+  assert.doesNotMatch(css, /\.msg\.user \.msg-body\s*\{[^}]*display: flex/);
 });
 
 contract('the attachment budget is total size, with a count sanity cap', () => {
@@ -727,23 +727,23 @@ contract('right-click is the page’s own menu, and no field offers prefill', ()
   assert.match(shell, /AreDefaultContextMenusEnabled = false/, 'and its own right-click menu stays off: the page draws that');
 });
 
-contract('the steer label sits level with its sentence', () => {
+contract('the steer label no longer shares the sentence\'s baseline', () => {
   const css = fs.readFileSync(path.join(ROOT, 'web', 'synapse.css'), 'utf8');
-  assert.match(css, /\.msg\.user \.msg-body \{[^}]*align-items: baseline/, 'the row is baseline aligned');
-  assert.match(css, /\.msg\.user \.msg-role \{[^}]*vertical-align: baseline/, 'and the label sits on it');
-  assert.doesNotMatch(css, /\.msg\.user\.is-steer \.msg-role \{[^}]*top: [0-9]/, 'no pixel nudge is left');
+  assert.match(css, /\.msg\.user \.msg-head \{[^}]*display: flex/, 'the header is not its own line');
+  assert.match(css, /\.msg\.user \.msg-text \{[^}]*display: block/, 'the sentence is not below it');
+  assert.doesNotMatch(css, /\.msg\.user\.is-steer \.msg-role \{[^}]*height:/, 'the steer role is still a made-to-measure box');
+  assert.doesNotMatch(css, /\.msg\.user\.is-steer \.msg-role \{[^}]*top: [0-9]/, 'a pixel nudge is back');
 });
 
 // A post with attachments rendered one character per line (20 Nov): six chips held 711px
 // of a 374px row because the chips were `flex: 0 0 auto`, and the text — `min-width: 0` —
-// collapsed to zero width and broke every character. The chips now take a full-width line
-// of their own and the text keeps a floor, so no number of attachments can squeeze it.
+// collapsed to zero width and broke every character. The header is now its own block and
+// the chips take a row under the sentence, so no number of attachments can squeeze it.
 contract('attachments sit under the text, never beside it', () => {
   const css = fs.readFileSync(path.join(ROOT, 'web', 'synapse.css'), 'utf8');
-  assert.match(css, /\.msg\.user \.msg-body \{ flex-wrap: wrap; \}/, 'the row may wrap');
-  assert.match(css, /\.msg\.user \.msg-text \{[^}]*min-width: 12ch/, 'the text has a floor');
-  assert.match(css, /\.msg\.user \.msg-files \{[^}]*flex: 0 0 100%/, 'the chips hold a full line');
-  assert.match(css, /\.msg\.user \.msg-files \{[^}]*order: 6/, 'and land after the text');
+  assert.match(css, /\.msg\.user \.msg-text \{[^}]*display: block/, 'the text is not its own row');
+  assert.match(css, /\.msg\.user \.msg-files \{[^}]*display: flex/, 'the chips are not a row');
+  assert.match(css, /\.msg\.user \.msg-files \{[^}]*margin: 6px 0 0/, 'the chips do not land under the text');
 });
 
 // A failed delete told the operator to close the project's chat — which is not what holds

@@ -1378,69 +1378,57 @@ body[data-mode="single"] #runAuto { display: none; }
   border-left: 2px solid var(--speaker); padding-left: 10px;
 }
 .msg.user { --speaker: var(--violet-bright); }
-/* A You message is a left-aligned row, but its parts share one vertical line.
-   The old inline layout left the role high, the text low and the clock higher
-   again because they used three different `vertical-align` values and a float.
-   The role and clock are now 18.75px boxes (12.5px × 1.5) centred on their own
-   line, so their glyphs sit on the same centre as the message text. Flex keeps
-   them on the first line of a long message instead of centring them down its
-   height. `order` moves the clock after the reuse button even though it is
-   first in the markup. */
-/* One baseline for the row - for good (13 Nov).
-   The label used to be a fixed 1.5em box, centred on its own glyphs, and the fix was a
-   nudge in pixels or em. Both are guesses: the gap between a box centre and the visual
-   centre of an uppercase word depends on the font metrics and on the chat size, so the
-   guess was right at one size and wrong at the next.
-   A flex row aligns items on their BASELINE, which is a property of the font, not a
-   number someone typed. The role is a plain inline box again, the row is baseline
-   aligned, and there is no nudge to get wrong. */
+/* A You message is a block like Architect and Synapse: the speaker and the time
+   own the first line, and the sentence starts below. The old flex row put "You",
+   the sentence and the clock on one baseline; no single nudge or box was right at
+   every chat size, which is the problem this removes (26 Nov). */
 .msg.user .msg-body {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
+  display: block;
   width: auto;
   max-width: none;
   margin: 0;
   position: static;
   padding-right: 0;
 }
+.msg.user .msg-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.msg.user .msg-head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  min-width: 0;
+}
 .msg.user .msg-role {
   display: inline-block;
   height: auto;
   line-height: inherit;
   margin-right: 0;
-  vertical-align: baseline;
-  /* A caption sits on the line, and small caps read a hair low when it does: 4% of the
-     type size below the baseline is the same fraction at 12px and at 24px. */
-  transform: translateY(0.04em);
+  vertical-align: middle;
+  transform: none;
 }
-.msg.user .msg-text { flex: 1 1 0; min-width: 12ch; }
-/* A chip and a pill are boxes, not words: they centre on the line rather than sit on a
-   baseline, or their borders hang below the sentence. */
-.msg.user .msg-files, .msg.user .msg-reuse { flex: 0 0 auto; align-self: center; }
+.msg.user .msg-text { display: block; margin-top: 2px; min-width: 0; }
+/* The attachments take their own line under the words, as before: a row of chips
+   cannot squeeze the sentence (20 Nov). */
+.msg.user .msg-files {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 6px 0 0;
+}
 .msg.user .msg-time {
   display: inline-flex;
   align-items: center;
-  height: calc(var(--chat-fs) * 1.5);
-  line-height: calc(var(--chat-fs) * 1.5);
+  height: auto;
+  line-height: 1.7;
   float: none;
   position: static;
-  margin-left: auto;
-  order: 5;
+  margin-left: 0;
 }
-.msg.user .msg-body { flex-wrap: wrap; }
-/* The attachments take their own line (20 Nov).
-   The chips row is `flex: 0 0 auto`, so six of them held 711px of a 374px message row;
-   the text was `flex: 0 1 auto; min-width: 0` and collapsed to zero width, breaking one
-   character per line — a 1,363-character post rendered 26,952px tall (found 20 Nov).
-   A full-width row under the text cannot do that: the text keeps the line and a 12ch
-   floor, and however many chips arrive they wrap under it. */
-.msg.user .msg-files {
-  flex: 0 0 100%;
-  order: 6;
-  align-self: start;
-  margin: 6px 0 0;
-}
+.msg.user .msg-reuse { margin-left: 0; }
 .msg.assistant { --speaker: var(--green); }
 .msg.harness { --speaker: var(--yellow); }
 /* A PROHIBITED refusal is the one harness line in red. It is not a report and not
@@ -1605,16 +1593,8 @@ body[data-mode="single"] #runAuto { display: none; }
 .chat-alarm-text {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* A steer's "You" sits beside the STEER: tag, and the tag is a flex box centred on
-   the sentence's line height — so the role label uses the same box rather than the
-   baseline nudge that suits a normal message header. Without this the word sat a
-   couple of pixels high beside the tag (reported 11 Nov, and again after the first
-   attempt on 9 Nov: the two labels are different shapes). */
-.msg.user.is-steer .msg-role {
-  display: inline-flex; align-items: center;
-  height: calc(var(--chat-fs) * 1.5);
-  vertical-align: middle;
-}
+/* A steer's "You" is the same header as every other You message; the STEER tag
+   belongs to the sentence below it, so the two no longer share a baseline. */
 /* A steer is on screen before the engine has read it. A purple dot breathes
    beside the tag — the same "this is still happening" mark a compaction wears,
    in the operator's own colour — and stops when the model reaches the next step.
@@ -3950,7 +3930,6 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
    is geometrically centred still reads high, and the chat's font size is the operator's
    setting — 0.23em is 2px at 13px and 3.2 at 14. Scoped to the user message so the trace
    row keeps its own centring. */
-.msg.user.is-steer .msg-role { vertical-align: baseline; }
 .msg.user .msg-steer { vertical-align: baseline; }
 /* ── the right-click menu ─────────────────────────────────────────────────
    The page's own, and only about text: Copy and Select All, Cut/Paste in a
