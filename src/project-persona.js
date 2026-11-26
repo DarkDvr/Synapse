@@ -48,6 +48,7 @@ export function readPersona(dir) {
     if (!name && !instructions) return null;
     return { name, instructions };
   } catch {
+    // A missing or malformed persona is no persona, not a failed project open.
     return null;
   }
 }

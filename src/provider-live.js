@@ -113,6 +113,7 @@ async function getJson(url, { apiKey = '', fetchImpl = fetch, timeoutMs = 700 } 
     try {
       body = JSON.parse(text);
     } catch {
+      // A body that is not JSON is the provider's own shape, not a transport failure.
       return { ok: false, status: res.status, json: false };
     }
     return { ok: true, body, status: res.status };
