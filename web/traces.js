@@ -143,7 +143,8 @@ export function renderTrace(t) {
       // reports it, or the line comes off if it failed.
       const state = n.pending ? ' is-pending' : '';
       const tip = n.pending ? 'Sent — the worker reads it at its next step.' : '';
-      return `<div class="trace-line is-steer${state}"${line}${tip ? ` title="${esc(tip)}"` : ''}><span class="msg-steer">STEER:</span><span class="trace-steer-text">${esc(said)}</span>${chips}</div>`;
+      const dot = n.pending ? '<span class="steer-dot" aria-hidden="true"></span>' : '';
+      return `<div class="trace-line is-steer${state}"${line}${tip ? ` title="${esc(tip)}"` : ''}>${dot}<span class="msg-steer">STEER:</span><span class="trace-steer-text">${esc(said)}</span>${chips}</div>`;
     }
     if (n?.prose) {
       // The worker's own words, drawn exactly like an Architect answer: same

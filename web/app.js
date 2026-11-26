@@ -949,20 +949,32 @@ async function openSession(id, { keepDraft = false } = {}) {
 // the engine's own message replaces it on the next transcript load. It is the same
 // promise a steer makes, kept in the same place: a `local-` message that lives
 // until the engine echoes it.
-function ensureLivePost() {
+function ensureLivePost(force = false) {
   if (!state.sessionId) return false;
   const msgs = state.messages || [];
   const last = msgs[msgs.length - 1];
   // A turn that already has its post, or a placeholder from a moment ago, and there
   // is nothing to open. `completed` is the engine's own word for a message it will
   // not add to any more.
-  if (last && last.type === 'assistant' && !last.completed) return false;
+  if (force) {
+    // A steer was just read: the model's next step belongs *below* it, even while
+    // the previous assistant message is still open. Only a user message at the end
+    // can be the steer; an assistant already there is the next step itself.
+    if (!last || last.type !== 'user') return false;
+    if (String(last.id || '').startsWith('local-live-')) return false;
+  } else if (last && last.type === 'assistant' && !last.completed) {
+    return false;
+  }
+  if (last && String(last.id || '').startsWith('local-live-')) return false;
   msgs.push({
     id: `local-live-${state.sessionId}-${Date.now()}`,
     type: 'assistant',
     created: Date.now(),
     completed: false,
     live: true,
+    // A post opened after a steer belongs after that steer in a reloaded transcript;
+    // the normal placeholder belongs before it (see loadMessages).
+    ...(force ? { afterSteer: true } : {}),
     parts: [],
   });
   return true;
@@ -1121,11 +1133,26 @@ async function loadMessages() {
     // until the transcript ends with an assistant message — the engine's own record
     // of that turn — and no longer (see ensureLivePost).
     const tail = loaded[loaded.length - 1];
-    const live = tail && tail.type === 'assistant'
-      ? []
-      : (state.messages || []).filter((m) => String(m?.id || '').startsWith('local-live-'));
+    // Two kinds of page-opened post: the turn's placeholder, which belongs before
+    // a pending steer, and the post opened when the steer was read, which belongs
+    // after it. Dropping the second one put the steer back under the thinking pane
+    // until the engine committed the next assistant step (26 Nov).
+    const localLive = (state.messages || []).filter((m) => String(m?.id || '').startsWith('local-live-'));
     const echoed = new Set(loaded.map((m) => String(m.text || '')));
-    state.messages = [...loaded, ...live, ...pending.filter((m) => !echoed.has(String(m.text || '')))];
+    const keptPending = pending.filter((m) => !echoed.has(String(m.text || '')));
+    const steerWaiting = keptPending.length > 0;
+    const live = localLive.filter((m) => {
+      if (m.afterSteer) return steerWaiting || !(tail && tail.type === 'assistant');
+      return !(tail && tail.type === 'assistant');
+    });
+    const beforeLive = live.filter((m) => !m.afterSteer);
+    const afterLive = live.filter((m) => m.afterSteer);
+    state.messages = [
+      ...loaded,
+      ...beforeLive,
+      ...keptPending,
+      ...afterLive,
+    ];
     // The chips on tool calls are a record that outlives the request, so a
     // transcript opened after the fact asks once. While the session is open they
     // arrive on the stream; this is only the catch-up.
@@ -2856,7 +2883,7 @@ async function bootPage() {
   });
   // The dock asks the app to reload the conversation, the cards that are waiting, the
   // compact chip and the rail.
-  composerWiring({ loadMessages, refreshPending, renderCompactChip, renderTree });
+  composerWiring({ loadMessages, refreshPending, renderCompactChip, renderTree, ensureLivePost });
   // The question post asks the app how long an answer waits, and tells it to refresh
   // the waiting cards and the rail.
   askPanelWiring({ answerWaitSec, refreshPending, renderTree, loadMessages });

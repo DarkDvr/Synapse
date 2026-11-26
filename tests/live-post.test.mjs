@@ -28,7 +28,7 @@ const live = read('web/live-runs.js');
 const transcript = read('web/transcript.js');
 
 // ── the post is the page's, opened on the first delta ─────────────
-check('the page can open a post of its own', /function ensureLivePost\(\)/.test(app));
+check('the page can open a post of its own', /function ensureLivePost\(force = false\)/.test(app));
 check(
   'it opens on a thinking delta',
   /EV\.reasoningDelta\)\s*\{\s*ensureLivePost\(\);/.test(app),
@@ -37,7 +37,11 @@ check(
 check('it opens on a speech delta', /EV\.textDelta\)\s*\{\s*ensureLivePost\(\);/.test(app), 'text branch does not call it');
 check(
   'it does not open a second one when the turn already has its post',
-  /last\.type === 'assistant' && !last\.completed\) return false/.test(app),
+  /last\.type === 'assistant' && !last\.completed\) \{\s*return false/.test(app),
+);
+check(
+  'a post opened after a read steer is marked, so a reload keeps it below the steer',
+  /afterSteer: true/.test(app) && /m\.afterSteer/.test(app),
 );
 check(
   'the placeholder is kept until the transcript ends with the engine\'s own message',

@@ -253,15 +253,19 @@ clock and picker joined into one row.
   one rule that turns yellow where the operator spoke. Every steer stays in the open tail,
   and a finished trace says `· steered` on its folded line so the words cannot vanish.
 - **A steer appears when it is sent.** The page paints it into the transcript or the
-  trace *before* the request, marked `pending`; the `STEER:` tag breathes and its rule
-  goes faint until the model has it. The Architect's request returns at the engine's
-  next step; a worker reports `run.steer` twice — once when the server took it, once
-  with `delivered` when the worker reached the boundary where it reads it. Only the
-  second ends the breath. A refusal takes the line off with a toast, and confirmation
-  **adopts** that line instead of pushing a second one. A file-only steer has no
-  sentence: the tag and its chip are the whole line, and it is still a steer. `steerLine()`
-  in `traces.js` builds the text for both sides, because two builders drift by half a
-  character and read as duplicates.
+  trace *before* the request, marked `pending`; a purple dot breathes beside the
+  `STEER:` tag, and the rule goes faint, until the model has it. The dot is the same
+  "this is still happening" mark a compaction wears, in the operator's own colour —
+  the tag alone was too quiet to see. For the Architect the request returns at the
+  engine's next step, and the page opens the next post at that moment so the steer
+  moves above the thinking pane *then*, not when the step ends. A worker reports
+  `run.steer` twice — once when the server took it, once with `delivered` when the
+  worker reached the boundary where it reads it. Only the second ends the breath. A
+  refusal takes the line off with a toast, and confirmation **adopts** that line
+  instead of pushing a second one. A file-only steer has no sentence: the tag and
+  its chip are the whole line, and it is still a steer. `steerLine()` in `traces.js`
+  builds the text for both sides, because two builders drift by half a character
+  and read as duplicates.
 - **A compaction is a moment, not a banner.** It wears the tool head's shape — a
   small yellow dot, `Compacting ×2`, and `context at 173K/205K` as the target — because
   that is the row the operator already reads as "something happened here". It has no

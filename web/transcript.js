@@ -549,10 +549,14 @@ export function renderMessage(m, tail = '', extras = '') {
     // The tag lives inside the text span, not beside it: it is a prefix to the
     // sentence, so the browser aligns it with the first line by itself instead of
     // a flex row's top edge lifting a 9.5px word above a 13.5px one (30 Oct).
-    const lead = steer ? '<span class="msg-steer">STEER:</span> ' : '';
+    // A purple dot breathes beside it while the steer has not been read — the
+    // same "something is happening" mark a compaction gets, in the operator's own
+    // colour (26 Nov).
+    const pending = m.pending ? ' is-pending' : '';
+    const dot = steer && m.pending ? '<span class="steer-dot" aria-hidden="true"></span>' : '';
+    const lead = steer ? `${dot}<span class="msg-steer">STEER:</span> ` : '';
     // A steer the page painted before the engine had read it breathes until the
     // engine's own message lands (or the steer request returns, for the Architect).
-    const pending = m.pending ? ' is-pending' : '';
     return `<div class="msg user${steer ? ' is-steer' : ''}${pending}"${line} data-msg="user"><div class="msg-body">
       ${stamp}<span class="msg-role">You</span><span class="msg-text">${lead}${esc(said)}</span>${chips}${reuse}
     </div></div>`;

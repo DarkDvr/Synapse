@@ -55,12 +55,29 @@ test('the page and the runner agree on the line, so one steer is one line', () =
   // The first event only says the server took it. The breath ends on the second,
   // when the worker reaches the boundary where it reads the steer.
   assert.match(body, /const sent = await api/, 'the steer is still sent');
+  assert.match(body, /wired\.ensureLivePost\(true\)/, 'the read does not move the steer above the next post');
   const runs = read('web/live-runs.js');
   assert.match(runs, /const existing = trace\.notes\.find\(\(n\) => n\?\.steer && n\.text === line\)/, 'the runner pushes a duplicate');
   assert.match(runs, /if \(ev\.delivered\) delete existing\.pending/, 'the runner never confirms the painted line');
   assert.match(runs, /\.\.\.\(ev\.delivered \? \{\} : \{ pending: true \}\)/, 'a steer from another view starts pending');
   assert.match(runs, /A steer the worker never reached/, 'a finished run stops the breath');
   assert.match(runs, /steerLine\(ev\.text\)/, 'the runner builds its own line instead of the shared one');
+});
+
+test('the pending steer wears a breathing dot, not just a faint tag', () => {
+  const html = renderTrace({
+    key: 'k',
+    role: 'coder-1',
+    task: 't6',
+    startedAt: 1,
+    notes: [{ at: 5, steer: true, text: 'look at this', pending: true }],
+  });
+  assert.match(html, /class="steer-dot"/, 'the pending line has no dot');
+  const transcript = read('web/transcript.js');
+  assert.match(transcript, /class="steer-dot"/, 'the pending post has no dot');
+  const css = read('web/synapse.css');
+  assert.match(css, /@keyframes steer-dot-breathe/);
+  assert.match(css, /\.is-steer\.is-pending \.steer-dot/, 'the dot does not breathe');
 });
 
 test('the pending line is visibly different, and only for the steer', () => {

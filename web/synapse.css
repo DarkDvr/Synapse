@@ -1615,10 +1615,24 @@ body[data-mode="single"] #runAuto { display: none; }
   height: calc(var(--chat-fs) * 1.5);
   vertical-align: middle;
 }
-/* A steer is on screen before the engine has read it. The tag breathes and the
-   rule goes faint until the model reaches the next step; then both stop, so the
-   animation itself is the receipt (25 Nov). The trace row uses the same breath
-   and stops when the runner reports the worker took it. */
+/* A steer is on screen before the engine has read it. A purple dot breathes
+   beside the tag — the same "this is still happening" mark a compaction wears,
+   in the operator's own colour — and stops when the model reaches the next step.
+   The trace row uses the same dot, so a worker's steer is just as visible. */
+.steer-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--violet-bright); vertical-align: middle;
+  margin-right: 5px; opacity: 0.9;
+  box-shadow: 0 0 6px rgba(139, 123, 255, 0.35);
+}
+.trace-line.is-steer .steer-dot { flex: none; margin-right: 0; }
+.is-steer.is-pending .steer-dot { animation: steer-dot-breathe 1.15s ease-in-out infinite; }
+@keyframes steer-dot-breathe {
+  0%, 100% { opacity: 0.28; box-shadow: 0 0 0 0 rgba(139, 123, 255, 0); }
+  50% { opacity: 1; box-shadow: 0 0 0 4px rgba(139, 123, 255, 0.14); }
+}
+/* The tag also breathes and the rule goes faint until the model reaches the next
+   step; then both stop, so the animation itself is the receipt. */
 .msg.user.is-steer.is-pending .msg-body { border-left-color: var(--violet-line); }
 .msg.user.is-steer.is-pending .msg-steer,
 .trace-line.is-steer.is-pending .msg-steer {
@@ -1629,6 +1643,7 @@ body[data-mode="single"] #runAuto { display: none; }
   50% { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .is-steer.is-pending .steer-dot { animation: none; opacity: 1; box-shadow: none; }
   .msg.user.is-steer.is-pending .msg-steer,
   .trace-line.is-steer.is-pending .msg-steer { animation: none; opacity: 0.7; }
 }
