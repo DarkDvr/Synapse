@@ -1216,11 +1216,12 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
           `the operator asks here is the whole job.`,
       );
     }
-    // Single is the one mode where a project can have its own voice. When it
-    // does, that voice replaces the global Architect instructions: two character
-    // briefs would disagree, and the model would follow whichever came last.
+    // Single is the one mode where a project can have its own voice. It is the
+    // project's persona or no voice at all: the global Architect instructions are
+    // Multi-only. They used to stand in when a project had no persona, which made
+    // one global block speak in every project that never asked for it — the exact
+    // way an old Vekra trial appeared in an unrelated chat (26 Nov).
     if (persona && (persona.name || persona.instructions)) lines.push(personaBlock(persona));
-    else if (instructions) lines.push(`The operator adds: ${plain(instructions)}`);
     // The operator's own standing rules are about this project, not about the old
     // campaign: they apply to a one-off request too. The stored requests do not.
     if (doc.notes) lines.push(`The operator's standing notes for this project:\n${plain(capped(doc.notes, 800))}`);

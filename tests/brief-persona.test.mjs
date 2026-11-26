@@ -28,11 +28,14 @@ test('Single with a persona uses it instead of the global instructions', () => {
   }
 });
 
-test('Single without a persona keeps the global instructions, as today', () => {
+test('Single without a persona has no global voice', () => {
   const dir = temp();
   try {
     const text = briefSession({ dir, role: 'architect', single: true, instructions: 'GLOBAL RULE' });
-    assert.match(text, /GLOBAL RULE/);
+    // The global block is Multi's. Using it as the Single fallback is how an old
+    // Vekra trial spoke in an unrelated project with no persona of its own.
+    assert.doesNotMatch(text, /GLOBAL RULE/);
+    assert.doesNotMatch(text, /The operator adds/);
     assert.doesNotMatch(text, /Vekra/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

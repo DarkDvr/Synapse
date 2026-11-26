@@ -41,8 +41,9 @@ leaves a handover behind. All five phases were built on 27 Oct.
     file and is not in force. The card reads `Vekra (Architect)` in Single and
     `Architect` in Multi; the transcript header stays `Architect`. The ✎ is the same
     role-settings dialog in both modes: skills stay shared, and in Single its
-    instruction box is the project persona. A mode switch replaces the one yellow
-    Synapse note with a Compact action, and the next brief carries the mode. A
+    instruction box is the project persona. A project without one has no voice in
+    Single: the global Architect instructions stay Multi-only. A mode switch replaces
+    the one yellow Synapse note with a Compact action, and the next brief carries the mode. A
     private project hides the persona from a LAN view with the rest of its files;
     a non-private project serves it to either view, exactly like its conversation.
 

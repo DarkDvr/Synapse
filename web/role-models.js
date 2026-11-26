@@ -274,7 +274,7 @@ export async function editRoleSettings(roleId) {
     value: entry.instructions || '',
     placeholder: isPersona ? '' : 'Anything it should remember every turn. Optional.',
     tip: isPersona
-      ? 'This replaces the global Architect instructions for this project in Single mode. Multi keeps the global block.'
+      ? 'This is this project’s Single-mode persona. Multi keeps the global block; with no persona, Single has no voice from it.'
       : '',
   });
   if (isPersona && persona && (persona.name || persona.instructions)) {
@@ -283,7 +283,7 @@ export async function editRoleSettings(roleId) {
       type: 'check',
       label: 'Remove this persona',
       value: false,
-      hint: 'The card returns to “Architect” and Single uses the global Architect instructions again.',
+      hint: 'The card returns to “Architect”. Single then has no persona; the global block stays Multi-only.',
     });
   }
 
@@ -293,7 +293,7 @@ export async function editRoleSettings(roleId) {
       roleId === 'qc'
         ? 'Tick a skill to let this role load it; “Required” makes the brief demand it, and the Architect is told if it was skipped. Real use is the default focus: the wording, the clipping and the bad input an ordinary person meets.'
         : isPersona
-          ? 'Skills apply in both modes. The instruction box is this project\'s Single-mode persona; Multi keeps the global Architect instructions. With no persona, Single uses the global block.'
+          ? 'Skills apply in both modes. The instruction box is this project\'s Single-mode persona; Multi keeps the global Architect instructions. With no persona, Single has no voice from the global block.'
           : 'Tick a skill to let this role load it; “Required” makes the brief demand it, and the Architect is told if it was skipped. Instructions are added to what the role is told on every turn.',
     fields,
     confirmLabel: 'Save',
@@ -361,7 +361,7 @@ export async function editRoleSettings(roleId) {
       toast(
         removePersona ? 'Persona Removed' : personaName || text ? 'Persona Saved' : 'Role Saved',
         removePersona
-          ? 'Single mode uses the global Architect instructions again. Skills stay saved for both modes.'
+          ? 'Single has no persona now; the global block stays Multi-only. Skills stay saved for both modes.'
           : personaName || text
             ? 'Skills apply in both modes; the persona is Single mode only.'
             : `${role?.name || roleId} settings saved for both modes.`,

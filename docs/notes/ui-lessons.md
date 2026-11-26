@@ -675,7 +675,9 @@ run — so they get `Allow Screen` / `Allow Sign-In` and **no Always Allow**.
   `Vekra (Architect)` with a small person mark; the transcript header stays `Architect`,
   the role id, picker and permissions stay `architect`, and Multi always says `Architect`.
   The ✎ is the same role-settings dialog in both modes: skills are shared, and in Single
-  its instruction box is the project persona while Multi's is the global block. A switch
+  its instruction box is the project persona while Multi's is the global block. Single
+  without a persona has **no voice at all** — the global block is Multi-only, so a
+  setting made for Multi cannot leak into an unrelated Single project. A switch
   leaves one yellow Synapse note with a Compact action, replaced in place on the next
   switch and never changing the conversation by itself.
 - **The one dot left is a red stall mark**, clickable to interrupt. Green "has a

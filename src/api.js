@@ -640,7 +640,10 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         // role" or "your report", because there is neither.
         skills: describeSkills(getConfig(), role, { chat: single }),
         focus: getConfig()?.roles?.[role]?.focus,
-        instructions: getConfig()?.roles?.[role]?.instructions,
+        // Global role instructions are for Multi and the worker roles. A Single
+        // Architect speaks from the project's persona or not at all; passing the
+        // global block here is how it used to become a fallback voice.
+        instructions: single ? '' : getConfig()?.roles?.[role]?.instructions,
         persona,
       });
       // The core carries the harness roots and — when the browser is on — the browser
