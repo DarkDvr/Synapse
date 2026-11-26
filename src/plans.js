@@ -1084,7 +1084,7 @@ export function handoverDigest(text, max = 700) {
  * skimmed. Facts first (what the plan currently says), then the one rule that
  * cannot be guessed (the Architect owns the file; nobody else writes it).
  */
-export function briefSession({ dir, role = 'architect', auto = false, single = false, skills = '', focus = '', instructions = '' } = {}) {
+export function briefSession({ dir, role = 'architect', auto = false, single = false, skills = '', focus = '', instructions = '', persona = null } = {}) {
   const state = readPlan(dir);
   // The project's own document: what was asked, what was decided, the operator's
   // standing notes and the last compact's handover. This is what makes a long
@@ -1104,6 +1104,23 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   // place (10 Nov, found by the strength tests: the notes could add a second
   // "## This round"). Escaped, not stripped: the reader still sees what was said.
   const plain = (text) => String(text || '').replace(/^(\s*)#/gm, '$1\\#');
+
+  // A project's Single-mode persona is a voice, not a second set of rules. Its
+  // name is what the card shows; the text is the operator's own words. It is
+  // placed before the harness rules that Single still needs, and it says out loud
+  // that those rules win so a persona can never turn into a permission rule.
+  const personaBlock = (p) => {
+    const name = String(p?.name || '').replace(/\s+/g, ' ').trim();
+    const text = String(p?.instructions || '').trim();
+    const out = [];
+    if (name) out.push(`Your name is ${name}; you are the Architect for this project.`);
+    if (text) out.push(plain(text));
+    out.push(
+      'That is a voice for this Single-mode project, not a change in what you do: the harness rules, the tools ' +
+        'and the permissions come first. Keep project files and code plain.',
+    );
+    return out.join('\n');
+  };
 
   lines.push(`Synapse project: ${path.basename(String(dir || '')) || 'unknown'}`);
 
@@ -1199,7 +1216,11 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
           `the operator asks here is the whole job.`,
       );
     }
-    if (instructions) lines.push(`The operator adds: ${plain(instructions)}`);
+    // Single is the one mode where a project can have its own voice. When it
+    // does, that voice replaces the global Architect instructions: two character
+    // briefs would disagree, and the model would follow whichever came last.
+    if (persona && (persona.name || persona.instructions)) lines.push(personaBlock(persona));
+    else if (instructions) lines.push(`The operator adds: ${plain(instructions)}`);
     // The operator's own standing rules are about this project, not about the old
     // campaign: they apply to a one-off request too. The stored requests do not.
     if (doc.notes) lines.push(`The operator's standing notes for this project:\n${plain(capped(doc.notes, 800))}`);
@@ -1261,6 +1282,14 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
       'server that was answering a run.',
   );
   lines.push('## What never changes', ...laws, '## How we work');
+  // A project may carry a Single-mode persona while it is in Multi. The text is
+  // not quoted here; the one thing the model needs is that the voice is off, so
+  // it does not keep answering as the persona from the transcript's history.
+  if (isArchitect && persona && (persona.name || persona.instructions)) {
+    lines.push(
+      'A Single-mode persona is on file for this project, but it is not in force in Multi: speak as the Architect.',
+    );
+  }
 
   // The project's document, in the three parts the brief needs: where it stands
   // (the latest request and the decisions still in force), the operator's own
@@ -1546,7 +1575,8 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
   }
   // The operator's own words for this role. Anything typed here is what the
   // role is told on every turn, which is the cheapest way to correct a habit
-  // without editing what the role is for.
+  // without editing what the role is for. Personas are Single-only and never
+  // reach this branch: Multi is the Architect's serious mode.
   if (instructions) lines.push(`The operator adds, for this role: ${plain(instructions)}`);
   // Which skills this role may load. Synapse enforces the same list through the
   // session's permission ruleset; saying it here is what stops a model wasting a

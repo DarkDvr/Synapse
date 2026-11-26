@@ -14,6 +14,8 @@ import { busyNow } from './turn-live.js';
 import { state } from './state.js';
 import { waitBegin, waitStep, waitToken, waitRetry, waitMetrics, waitEnd, waitingText } from './waiting.js';
 import { startWaitMetrics, stopWaitMetrics } from './wait-metrics.js';
+import { loadPersona, clearPersonaState, renderPersonaCard, editPersona } from './persona.js';
+import { setModeNote, clearModeNote } from './mode-note.js';
 import { esc, relTime, hhmm, hhmmss, toolTarget, versionTag, shortSpan, fmtBytes, samePath, ago, shortName } from './format.js';
 import { loadPlan, renderPlan, updatePlanOverflow, planPaneWiring } from './plan-pane.js';
 import {
@@ -182,7 +184,7 @@ import {
   setAutomationSwitch,
 } from './run-menu.js';
 import { renderMode, sessionMode, chatBody, answerWaitSec, SINGLE_PERMISSIONS } from './mode.js';
-import { compactPostOf, renderCompactChip, compactClick, compactWiring } from './compact.js';
+import { compactPostOf, renderCompactChip, compactClick, runCompact, compactWiring } from './compact.js';
 import { renderEffort, fillRoleModels, editRoleSettings, setRoleModel, cycleEffort, roleModelsWiring } from './role-models.js';
 import {
   openProjectMenu,
@@ -657,6 +659,7 @@ function applyMode(mode) {
   scroller?.addEventListener('wheel', cancel, { passive: true, once: true });
   scroller?.addEventListener('touchmove', cancel, { passive: true, once: true });
   const was = state.mode;
+  const hadPersona = Boolean(state.persona?.name || state.persona?.instructions);
   state.mode = mode;
   // Keep Building is read-only in Single. Entering Multi is the first moment it
   // can act, so it starts at the default instead of whatever stale value Single
@@ -665,9 +668,21 @@ function applyMode(mode) {
     state.automation = { ...(state.automation || {}), keepBuilding: AUTOMATION_DEFAULTS.keepBuilding };
     setAutomationSwitch('keepBuilding', AUTOMATION_DEFAULTS.keepBuilding, { quiet: true });
   }
+  renderPersonaCard();
+  // The card changes at once; the chat gets one yellow note only when a persona
+  // actually crossed the boundary. It is a recommendation, never an automatic
+  // compaction, and it is not sent to the model.
+  if (hadPersona && was === 'single' && mode === 'multi') {
+    setModeNote('off', state.persona?.name || '');
+  } else if (hadPersona && was === 'multi' && mode === 'single') {
+    setModeNote('on', state.persona?.name || '');
+  } else {
+    clearModeNote();
+  }
   renderMode();
   renderPlan();
   setView();
+  renderTranscript();
   // The switch's own reflow is followed by the ResizeObserver on the transcript; this
   // is the first frame, so there is something to follow from.
   requestAnimationFrame(() => { if (!interfered) scrollChatToBottom(); });
@@ -863,9 +878,11 @@ async function openSession(id, { keepDraft = false } = {}) {
   state.messages = [];
   state.archCtx = null;
   state.lease = null;
-  // The waiting line belongs to the turn, and the turn belongs to the chat it
-  // started in. A feed left polling would paint another session's prompt.
+  // The waiting line and the persona card belong to the chat/project they were
+  // read for: clear them before the new fetch can paint a frame of the old one.
   endWait();
+  clearModeNote();
+  clearPersonaState();
   // A draft belongs to the chat it was typed in. Carrying it across the switch sent
   // one project's words into another as a Steer (21 Nov): the box goes with the chat.
   // A compact is the exception: the new session is the same conversation, so the
@@ -900,6 +917,9 @@ async function openSession(id, { keepDraft = false } = {}) {
   state.clocks = loadClocks(id);
   // the mode is a property of the session, not of the app
   state.mode = sessionMode(findSession(id));
+  // Single is the only mode that can show a persona; load it after the mode so the
+  // card knows which label it is painting.
+  loadPersona().catch(() => {});
   state.automation = { ...AUTOMATION_DEFAULTS, ...(findSession(id)?.automation || {}) };
   // The Architect's role card follows the session, not the config: every project
   // keeps its own Architect model on its own chat. Worker roles stay config-wide.
@@ -1118,6 +1138,8 @@ function closeReasoningFolds() {
 function showNothing() {
   flushClocks();
   endWait();
+  clearModeNote();
+  clearPersonaState();
   state.view = 'none';
   state.sessionId = null;
   state.messages = [];
@@ -1434,6 +1456,7 @@ function connectStream() {
       state.toolsInFlight.clear();
       state.archCtx = null;
       endWait();
+      clearModeNote();
       state.busy = false;
       state.stopping = false;
       state.stoppingReason = null;
@@ -2236,6 +2259,22 @@ function wire() {
   $('deskTakeBack')?.addEventListener('click', takeBackScreen);
   $('modeToggle').addEventListener('click', switchMode);
   $('compactChip').addEventListener('click', compactClick);
+  // The Compact action on a persona mode note: the ordinary compaction flow, after
+  // one confirm. It is a recommendation the operator can ignore.
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest?.('[data-mode-compact]');
+    if (!btn || state.compacting) return;
+    e.preventDefault();
+    const ok = await openDialog({
+      title: 'Compact This Conversation?',
+      message: 'The transcript will be replaced by the engine\'s handover. The project document, plan and files stay. The next turn is briefed without the persona.',
+      confirmLabel: 'Compact',
+    });
+    if (!ok) return;
+    clearModeNote();
+    renderTranscript();
+    await runCompact();
+  });
   // The compact post is a <details>; its open state is kept like a reasoning
   // block's, so a stream that re-renders the chat does not snap it shut.
   $('transcript')?.addEventListener(
@@ -2737,7 +2776,11 @@ document.addEventListener('keydown', (e) => {
     btn.addEventListener('click', (e) => {
       e.preventDefault();
       const role = btn.closest('.role-card')?.querySelector('.role-model')?.dataset.role;
-      if (role) editRoleSettings(role);
+      if (!role) return;
+      // The same ✎ is two dialogs by mode: Single edits this project's voice,
+      // Multi edits the serious role settings (skills + global instructions).
+      if (role === 'architect' && state.mode === 'single') editPersona();
+      else editRoleSettings(role);
     }),
   );
 

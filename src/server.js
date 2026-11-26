@@ -579,6 +579,17 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       if (seg[2] === 'private' && method === 'POST') {
         return sendJson(res, 200, await api.setProjectPrivate(projectId, await readBody(req)));
       }
+      // The project's Single-mode persona. Local only, by design: a LAN view is
+      // never told the name or the text. The file is inside `.project`, and the
+      // save path never logs its contents.
+      if (seg[2] === 'persona' && method === 'GET') {
+        if (fromLan) return sendJson(res, 404, { error: 'not found' });
+        return sendJson(res, 200, await api.projectPersona(projectId, { remote: fromLan }));
+      }
+      if (seg[2] === 'persona' && method === 'PUT') {
+        if (fromLan) return sendJson(res, 404, { error: 'not found' });
+        return sendJson(res, 200, await api.setProjectPersona(projectId, await readBody(req), { remote: fromLan }));
+      }
       if (seg.length === 2 && method === 'DELETE') {
         return sendJson(res, 200, await api.deleteProject(projectId, await readBody(req)));
       }
@@ -629,7 +640,7 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       // 11 MB of JSON. Measured 25 Oct: an ordinary screenshot was refused with
       // "request body too large" and the operator saw a toast that vanished.
       if (seg[2] === 'messages' && method === 'POST') {
-        return sendJson(res, 200, await api.sendMessage(sessionId, await readBody(req, MESSAGE_BODY_LIMIT), actorOf(req)));
+        return sendJson(res, 200, await api.sendMessage(sessionId, await readBody(req, MESSAGE_BODY_LIMIT), actorOf(req), { remote: fromLan }));
       }
       // POST /api/sessions/{id}/steer — guidance into work already running. The
       // engine reads it at the next step boundary; Stop is still the hard stop.

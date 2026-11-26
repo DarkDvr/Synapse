@@ -35,6 +35,13 @@ leaves a handover behind. All five phases were built on 27 Oct.
 8. **One file**: `project.md` holds the head, the handover, the Notes and the Log.
 9. **"Always Allow" grants carry across a compact.** Compaction is about context, not
    consent.
+10. **A persona is Single-only and project-only.** It lives in
+    `.project\persona.json`, never in the config, the project document or the records
+    commit. Multi ignores it; the Multi brief only says that a Single-mode persona is on
+    file and is not in force. The card reads `Vekra (Architect)` in Single and
+    `Architect` in Multi; the transcript header stays `Architect`. A mode switch leaves
+    one yellow Synapse note with a Compact action, and the next brief carries the mode.
+    The route is local-only: a LAN view is never told the name or the text.
 
 ## How compaction works
 

@@ -881,6 +881,11 @@ body.dark .sidebar-bottom,
   overflow: hidden; text-overflow: ellipsis;
   flex: 0 0 auto;
 }
+/* A Single-mode persona is a name with a small person mark, not a new role. */
+.role-head h3 .set-ic {
+  width: 13px; height: 13px; display: inline-block; vertical-align: -2px;
+  margin-right: 4px; opacity: 0.72;
+}
 /* short role names on the left, so the picker is a fixed, generous width and
    always butts up against the edit button on the right */
 /* The role's name never runs into the model picker: the picker is right-aligned,
@@ -3978,6 +3983,13 @@ body.is-disconnected .app-shell { filter: blur(2px) brightness(0.45); pointer-ev
   .msg-wait .msg-body::after { animation: none; opacity: 0.7; }
 }
 .msg-wait .msg-wait-note { display: block; color: var(--muted); line-height: 1.5; }
+/* A mode switch with a persona leaves one quiet harness note, not a modal. */
+.msg-mode-note .msg-body { display: flex; flex-direction: column; gap: 6px; }
+.msg-mode-note .msg-mode-text { color: var(--muted); line-height: 1.5; }
+.mode-note-compact {
+  align-self: flex-start; font-size: 11px; line-height: 1.2;
+  padding: 3px 9px; margin-top: 1px;
+}
 
 /* A row that has just appeared slides up into place, instead of existing between two
    frames. The renderer decides which rows are new and how far into their slide a rebuilt

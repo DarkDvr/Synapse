@@ -61,6 +61,18 @@ test('an empty chat says so, and a message is drawn', () => {
   assert.match(html, /msg user/, 'the message has no speaker');
 });
 
+test('a persona mode note is drawn as a harness line, with its Compact action', () => {
+  const page = reset([{ id: 'm0', type: 'user', text: 'work', created: Date.now() }]);
+  state.modeNote = { at: Date.now(), kind: 'off', persona: 'Vekra' };
+  renderTranscript();
+  assert.match(page.innerHTML, /data-mode-note/);
+  assert.match(page.innerHTML, /Vekra was the Single-mode persona/);
+  assert.match(page.innerHTML, /data-mode-compact/);
+  state.modeNote = null;
+  renderTranscript();
+  assert.doesNotMatch(page.innerHTML, /data-mode-note/);
+});
+
 test('a worker trace renders its steer, its permission and one older-entries fold', async () => {
   const { renderTrace } = await import('../web/traces.js');
   const notes = [];

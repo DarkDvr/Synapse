@@ -49,6 +49,7 @@ export function vcsIgnore() {
     'reports/diffs/',
     'cache/',
     'runs.jsonl',
+    'persona.json',
     '*.log',
     '',
   ].join('\n');

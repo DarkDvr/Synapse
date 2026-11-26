@@ -31,6 +31,7 @@ import { providerApiKey } from './config.js';
 import { configureBrowserAsks } from './browser/ask.js';
 import { browserSettings } from './browser/settings.js';
 import { readProjectRoles, writeProjectRoles, effectiveRoles, roleModel, mergeRoles } from './project-roles.js';
+import { readPersona, writePersona } from './project-persona.js';
 import * as windows from './windows.js';
 import { questionSignature, guardDecision, readableAnswer } from './question-loop.js';
 import { setProviderKey, providerKeyState, maskKey } from './secrets.js';
@@ -597,7 +598,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
    * typed it. Failure is logged once and never blocks the turn — an engine
    * without the concept still works, it just gets no brief.
    */
-  async function brief(sessionId, directory, role, auto = false, { single: forcedSingle = null } = {}) {
+  async function brief(sessionId, directory, role, auto = false, { single: forcedSingle = null, remote = false } = {}) {
     try {
       // The project's document is created (and the two old files imported) the
       // first time a project is briefed, so the brief can name one file. It is
@@ -620,6 +621,11 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       } else {
         single = forcedSingle === true;
       }
+      // A persona belongs to one project and one mode. Multi must never see its
+      // text, even when the file exists; it only needs to know a Single-mode
+      // persona is on file so the next turn does not keep using it by habit. A
+      // LAN view is never told it at all — not even that it exists.
+      const persona = !remote && role === 'architect' ? readPersona(directory) : null;
       const text = briefSession({
         dir: directory,
         role,
@@ -630,6 +636,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         skills: describeSkills(getConfig(), role, { chat: single }),
         focus: getConfig()?.roles?.[role]?.focus,
         instructions: getConfig()?.roles?.[role]?.instructions,
+        persona,
       });
       // The core carries the harness roots and — when the browser is on — the browser
       // and search tool names. It is the same block for every role, so it is set once
@@ -1918,6 +1925,26 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       return found?.directory || '';
     },
 
+    /**
+     * A project's Single-mode persona.
+     *
+     * Local only: the persona is personal and may name a private project's work.
+     * A LAN view never receives it, and a save never writes its text to a log.
+     */
+    projectPersona: (id, { remote = false } = {}) => {
+      if (remote) throw fail(404, 'not found');
+      const project = projects.find(id);
+      if (!project) throw fail(404, 'project not found');
+      return { persona: readPersona(project.directory) };
+    },
+
+    setProjectPersona: (id, body, { remote = false } = {}) => {
+      if (remote) throw fail(404, 'not found');
+      const project = projects.find(id);
+      if (!project) throw fail(404, 'project not found');
+      return { persona: writePersona(project.directory, body) };
+    },
+
     createProject: async (body) => {
       // Does this folder already carry a plan? Adding a project only registers a
       // directory, so a folder the operator deleted the *project* for is still on
@@ -2598,7 +2625,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       return { ...state, used: usedRoles(directory, sessionId), spent, reported };
     },
 
-    sendMessage: async (sessionId, body, actor = null) => {
+    sendMessage: async (sessionId, body, actor = null, { remote = false } = {}) => {
       requireReady();
       const text = String(body?.text ?? '').trim();
       // An attachment on its own is a message: "look at this" with the file in
@@ -2672,7 +2699,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
             app.warn(`could not close the round: ${err.message}`);
           }
         }
-        await brief(sessionId, directory, 'architect', session?.automation?.keepBuilding === true, { single });
+        await brief(sessionId, directory, 'architect', session?.automation?.keepBuilding === true, { single, remote });
       } catch (err) {
         app.warn(`brief skipped for ${sessionId}: ${err.message}`);
       }

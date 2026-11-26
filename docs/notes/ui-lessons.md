@@ -671,6 +671,12 @@ run — so they get `Allow Screen` / `Allow Sign-In` and **no Always Allow**.
 - **The order is the registry file**, written in the order shown, a new project appended.
   Nothing is sorted by name: a rename must not move a row the operator is looking for. The
   model menu follows the provider order set in Settings for the same reason.
+- **A persona is a card label, not a role.** In Single the Architect card can read
+  `Vekra (Architect)` with a small person mark; the transcript header stays `Architect`,
+  the role id, picker and permissions stay `architect`, and Multi always says `Architect`.
+  The ✎ is mode-aware: persona in Single, the global role settings in Multi. A switch
+  writes one yellow Synapse note with a Compact action and never changes the conversation
+  by itself.
 - **The one dot left is a red stall mark**, clickable to interrupt. Green "has a
   conversation" and amber "working" went because the row already says both; a stall is
   rare enough that its absence need not reserve a 7px hole in every row.

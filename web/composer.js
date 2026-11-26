@@ -18,6 +18,7 @@ import { chatScroller, animateScroll } from './chat-scroll.js';
 import { currentProject, currentRun, roleLabel, currentForm, selectionFor, modelByRef, permissionsHere, inChat } from './run-view.js';
 import { renderTranscript, attachmentImage } from './transcript.js';
 import { traceOf, steerLine } from './traces.js';
+import { clearModeNote } from './mode-note.js';
 
 const missing = (name) => () => {
   throw new Error(`composer.js: ${name} was not wired at boot`);
@@ -175,6 +176,9 @@ export async function send() {
     return;
   }
 
+  // The persona note was about the switch; the next message is the conversation
+  // moving on. It belongs above this message, not after it.
+  clearModeNote();
   input.value = '';
   autoGrow(input);
   // No optimistic "busy" mark here. It used to colour the rail on the same click, but
@@ -283,6 +287,7 @@ export async function send() {
  */
 async function sendSteer(text, files, target) {
   const input = $('promptInput');
+  clearModeNote();
   // The line is painted the moment the operator presses Steer, before the request.
   // The engine's steer prompt does not come back until the model reaches its next
   // step, so waiting for the answer left the chat unchanged for minutes — and with

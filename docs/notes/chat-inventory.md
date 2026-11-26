@@ -56,6 +56,7 @@ Ids are stable: they are the ticket and scenario names. `M` = must, `P` = pain t
 | A11 | a compaction | a post at the top of the new chat: "Compacted <when> · N messages" | M: survives a reload; replaced by the next compact; the only thing in a fresh chat |
 | A12 | consecutive assistant steps | one post | M: a line that arrived between two steps must not move to the end of the turn; the pane belongs to the newest assistant post. P: the merge hides which step a card came from |
 | A13 | any post rebuilt | — | M: **nothing the operator opened closes**, across a poll, a regroup or a trace update. P: a message fold that rolls into the archive loses its own key |
+| A14 | closing a Single-mode persona, or bringing it back | one yellow Synapse note: `persona off` / `persona on`, with **Compact** | M: appears only when there was a persona; names it; recommends compaction rather than doing it; clears on the next send or chat; never sent to the model |
 
 ### B. Prose
 

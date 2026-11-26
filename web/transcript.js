@@ -14,6 +14,7 @@ import { $ } from './dom.js';
 import { esc, hhmm, toolTarget, toolFile, toolNameLabel, fileChip, shortName, reasoningGist } from './format.js';
 import { renderMarkdown } from './md.js';
 import { waitPostHtml } from './wait-post.js';
+import { modeNoteHtml } from './mode-note.js';
 import { waitingText } from './waiting.js';
 import { serverNow } from './api.js';
 import { permissionNote, permissionChip } from './ask-note.js';
@@ -337,6 +338,9 @@ export function renderTranscript() {
   // A turn queued for a busy local server is a post of its own, drawn from the
   // server's queue so it survives a switch and a reload (20 Nov).
   const waitPost = waitPostHtml(state.lease);
+  // A mode switch with a persona leaves one harness note at the end of the chat;
+  // it is not a message and it is not sent to the model.
+  const modeNote = modeNoteHtml();
   // The post a compact left: the only thing the new chat starts with. It is not
   // a message — no speaker — and it comes from this chat's own metadata, so it
   // survives a reload and is gone when the next compact replaces the chat.
@@ -348,7 +352,7 @@ export function renderTranscript() {
   // hanging outside it. A form is something to read, so the dock opens for it.
   const downloads = downloadsForProject();
   const hasHistory =
-    showable.length > 0 || Boolean(postHtml) || Boolean(pending) || Boolean(waitPost) || Boolean(currentForm()) || alarmsHere().length > 0 || downloads.length > 0;
+    showable.length > 0 || Boolean(postHtml) || Boolean(modeNote) || Boolean(pending) || Boolean(waitPost) || Boolean(currentForm()) || alarmsHere().length > 0 || downloads.length > 0;
   // The dock is a bare composer while empty and fills the stage once there is
   // anything to show; the CSS keys off this class, so set it on every render.
   $('chatDock')?.classList.toggle('has-history', hasHistory);
@@ -371,7 +375,7 @@ export function renderTranscript() {
       .join(',');
   };
   const sig = hasHistory
-    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${messageSig(m)}`).join(',')}|${pending.length}|${waitPost ? 1 : 0}|${state.streaming}|${traceSig()}|${alarmsHere().length}|${state.decisionSeq}|${state.downloadSeq}|${
+    ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${messageSig(m)}`).join(',')}|${pending.length}|${modeNote ? state.modeNote?.at || 1 : 0}|${waitPost ? 1 : 0}|${state.streaming}|${traceSig()}|${alarmsHere().length}|${state.decisionSeq}|${state.downloadSeq}|${
         compactPost ? `${compactPost.at}:${compactPost.summary.length}` : ''
       }`
     : '';
@@ -483,7 +487,7 @@ export function renderTranscript() {
   const chat = String(currentProject()?.directory || '');
   const firstDraw = chat !== drawnFor;
   drawnFor = chat;
-  el.innerHTML = html + waitPost + pending;
+  el.innerHTML = html + modeNote + waitPost + pending;
   arrive(el, seenRows, firstDraw);
   // The live panel's slide is a transform on a node this rebuild just replaced, so
   // the offset has to be put back or the text snaps to its first line.

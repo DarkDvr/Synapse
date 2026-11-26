@@ -130,6 +130,14 @@ export const state = {
   // allowed, role cards revealed). New sessions start single; the toggle
   // switches the open session live.
   mode: 'single',
+  // The open project's Single-mode persona, and the project it was read for. It
+  // is never part of the global config; `personaFor` is how a switch cannot show
+  // the previous project's name for a frame.
+  persona: null,
+  personaFor: null,
+  // The one yellow Synapse note a mode switch can leave in the chat, with the
+  // Compact action. It clears on the next send or when another chat opens.
+  modeNote: null,
   // A compact in flight: the chip says "Compacting…" and refuses a second click.
   // The chat is about to be replaced, so nothing else may be sent meanwhile.
   compacting: false,
