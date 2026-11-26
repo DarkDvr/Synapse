@@ -327,6 +327,16 @@ clock and picker joined into one row.
   rest it reads `CTRL+Enter to send`. `field-sizing: content` sizes the box (see Traps). Stop
   is enabled by `state.busy`, `currentRun()`, `state.canStop`, `state.compacting` or a lease
   wait — it is the way out of everything.
+- **A waiting line is a fact with a timestamp, not a mood.** The empty Architect post says
+  what is *known* about the turn, and only the latest fact: `Connecting…`, `Waiting for the
+  model…`, `Connected`, `Model loading…`, `Queued…`, `Reading prompt N/N…`, `Thinking…`,
+  `Retrying… — reason`. Engine events supply the boundaries every model has; a local
+  server's `/metrics` supplies the prompt counter when it answers. The resolver
+  (`web/waiting.js`) ranks by specificity and freshness, so a stale metric never takes a
+  step back from `Thinking`. A source that is absent makes the line shorter, never invented:
+  no fake `Connected`, no estimated `N/N`. The line is one node with `data-wait`, updated by
+  `tickWait()` — not a render, not a new post, no history, no scroll movement. The elapsed
+  seconds matter as much as the words: `3s` and `90s` are different diagnoses.
 - **A file card is a door.** Right-clicking a tool card that named a `filePath`/`path` offers
   exactly **Open File** and **Open Folder**; a picture chip with a project-relative path does
   too. The server resolves the path against the project and refuses anything outside it —

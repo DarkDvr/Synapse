@@ -24,6 +24,7 @@ import { mayRecycleFolder } from './projects.js';
 import { fetchProviderModels } from './providers.js';
 import { providerId } from './providers.js';
 import { isLocalProvider, providerUp } from './providers.js';
+import { fetchProviderLive } from './provider-live.js';
 import { localServer } from './local-lease.js';
 import { loadQueued, putQueued, dropQueued, renameQueuedDir } from './queued-sends.js';
 import { providerApiKey } from './config.js';
@@ -1434,6 +1435,30 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       const id = String(body?.id || '').trim();
       const key = id ? providerApiKey({ id, apiKey: body?.apiKey }, process.env).key : String(body?.apiKey || '').trim();
       return fetchProviderModels({ ...(body || {}), apiKey: key });
+    },
+
+    /**
+     * What a local model server is doing right now.
+     *
+     * A page asks this only while a turn is waiting, and only for a loopback
+     * provider. It is not a status probe and it never reaches a vendor: the
+     * answer is the server's own live counter, normalised to the few fields the
+     * waiting line can use. A remote view gets nothing — the counters describe
+     * this machine, not the project.
+     */
+    providerLive: async (id, { remote = false } = {}) => {
+      if (remote) return { ok: false, reachable: false, reason: 'local only' };
+      const wanted = String(id || '').trim();
+      if (!wanted) return { ok: false, reachable: false, reason: 'no provider' };
+      const providers = Array.isArray(getConfig()?.engine?.opencode?.providers)
+        ? getConfig().engine.opencode.providers
+        : [];
+      const provider = providers.find((p) => String(p?.id || '') === wanted);
+      if (!provider || !isLocalProvider(provider)) {
+        return { ok: false, reachable: false, reason: 'not local' };
+      }
+      const key = providerApiKey(provider, process.env).key;
+      return fetchProviderLive({ ...provider, apiKey: key });
     },
 
     // Settings > Save Changes asks whether to restart. The engine and the server

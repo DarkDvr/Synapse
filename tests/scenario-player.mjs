@@ -30,6 +30,7 @@ function reset(state) {
   state.decisionSeq = 0;
   state.downloadSeq = 0;
   state.liveTool = null;
+  state.wait = null;
   state.compacting = false;
 }
 

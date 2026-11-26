@@ -482,6 +482,11 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
     if (seg[0] === 'providers' && seg[1] === 'models' && method === 'POST') {
       return sendJson(res, 200, await api.providerModels(await readBody(req)));
     }
+    // GET /api/providers/live?id= — the live counter a local server keeps for the
+    // turn it is processing. Not a health check, and never a remote provider.
+    if (seg[0] === 'providers' && seg[1] === 'live' && method === 'GET') {
+      return sendJson(res, 200, await api.providerLive(query?.get('id') || '', { remote: fromLan }));
+    }
     if (seg[0] === 'models' && seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.models());
     if (seg[0] === 'skills' && seg.length === 1 && method === 'GET') return sendJson(res, 200, await api.skills());
     if (seg[0] === 'models' && seg[1] === 'cache' && method === 'GET') return sendJson(res, 200, await api.modelCache());

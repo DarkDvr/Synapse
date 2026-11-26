@@ -14,6 +14,7 @@ import { $ } from './dom.js';
 import { esc, hhmm, toolTarget, toolFile, toolNameLabel, fileChip, shortName, reasoningGist } from './format.js';
 import { renderMarkdown } from './md.js';
 import { waitPostHtml } from './wait-post.js';
+import { waitingText } from './waiting.js';
 import { serverNow } from './api.js';
 import { permissionNote, permissionChip } from './ask-note.js';
 import { alarmsHere, renderAlarm, leasesHere, renderLease, chatErrorsHere, renderChatError, leaseClock, leaseFor, callLeaseClock, leaseOfMessages } from './chat-notes.js';
@@ -710,7 +711,7 @@ export function renderMessage(m, tail = '', extras = '') {
     } else if (parts.length === 0 && !m.error && !(m.live && tail)) {
       body.push(
         m.live
-          ? '<div class="trace-line is-waiting">Thinking…</div>'
+          ? `<div class="trace-line is-waiting" data-wait>${esc(waitingText(state.wait, serverNow()) || 'Thinking…')}</div>`
           : '<span class="msg-text">…</span>',
       );
     }

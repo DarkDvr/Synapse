@@ -12,6 +12,8 @@ import { renderMarkdown } from './md.js';
 import { EV, turnEnded, turnOver, shortEvent } from './events.js';
 import { busyNow } from './turn-live.js';
 import { state } from './state.js';
+import { waitBegin, waitStep, waitToken, waitRetry, waitMetrics, waitEnd, waitingText } from './waiting.js';
+import { startWaitMetrics, stopWaitMetrics } from './wait-metrics.js';
 import { esc, relTime, hhmm, hhmmss, toolTarget, versionTag, shortSpan, fmtBytes, samePath, ago, shortName } from './format.js';
 import { loadPlan, renderPlan, updatePlanOverflow, planPaneWiring } from './plan-pane.js';
 import {
@@ -860,6 +862,9 @@ async function openSession(id, { keepDraft = false } = {}) {
   state.messages = [];
   state.archCtx = null;
   state.lease = null;
+  // The waiting line belongs to the turn, and the turn belongs to the chat it
+  // started in. A feed left polling would paint another session's prompt.
+  endWait();
   // A draft belongs to the chat it was typed in. Carrying it across the switch sent
   // one project's words into another as a Steer (21 Nov): the box goes with the chat.
   // A compact is the exception: the new session is the same conversation, so the
@@ -980,6 +985,89 @@ function ensureLivePost(force = false) {
   return true;
 }
 
+// ── the one-line waiting state ──────────────────────────────────
+//
+// The empty Architect post used to say "Thinking…" from the moment the engine
+// accepted the turn until the first token. That covered the whole provider wait —
+// connect, auth, queue and prompt reading — and named none of it. The facts now
+// come from the engine events and, for a local server, its live counter; the
+// judgement is in web/waiting.js, and this is only the wiring.
+
+/** The provider behind the open Architect's model, or null when the config is not here yet. */
+function architectProvider() {
+  const ref = architectSelection()?.ref || '';
+  const id = String(ref).split('/')[0];
+  if (!id) return null;
+  return (state.config?.engine?.opencode?.providers || []).find((p) => String(p?.id || '') === id) || null;
+}
+
+/** Start a turn's waiting state and, for a local server, its live feed. */
+function beginWait(sessionId) {
+  const provider = architectProvider();
+  const local = Boolean(provider && isLocalServer(provider));
+  state.wait = waitBegin({ sessionId, at: serverNow(), local });
+  if (local && provider?.id) {
+    startWaitMetrics(provider.id, (metrics) => {
+      state.wait = waitMetrics(state.wait, metrics, serverNow());
+      // A metric can be the first thing to see generation begin; stop asking the
+      // server once the engine's own line is the right one.
+      if (state.wait?.phase === 'thinking') stopWaitMetrics();
+      tickWait();
+    });
+  } else {
+    stopWaitMetrics();
+  }
+  tickWait();
+}
+
+/** The first byte of output ends the wait; later deltas need no work here. */
+function markOutput() {
+  stopWaitMetrics();
+  if (!state.wait || state.wait.phase === 'thinking') return;
+  state.wait = waitToken(state.wait, serverNow());
+  tickWait();
+}
+
+/** Drop the state with the turn. The next event starts a fresh one. */
+function endWait() {
+  stopWaitMetrics();
+  state.wait = waitEnd();
+  tickWait();
+}
+
+/** Replace the one line in place. No render: the node is already there. */
+function tickWait() {
+  if (!state.wait) return;
+  const line = document.querySelector('[data-wait]');
+  if (!line) return;
+  const text = waitingText(state.wait, serverNow());
+  if (text && line.textContent !== text) line.textContent = text;
+}
+
+/** The engine's retry event, in the few words the line can use. */
+function retryWaitInfo(ev, at = Date.now()) {
+  const raw = ev?.raw || {};
+  const data = raw.data || raw.properties || {};
+  const error = data.error || raw.error || {};
+  const detail = String(error.message || data.message || raw.message || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const absolute = Number(data.retryAt ?? data.retry_at ?? 0);
+  const afterMs = Number(data.retryAfterMs ?? data.retry_after_ms ?? 0);
+  const after = Number(data.retryAfter ?? data.retry_after ?? 0);
+  let retryAt = Number.isFinite(absolute) && absolute > at ? absolute : 0;
+  if (!retryAt && Number.isFinite(afterMs) && afterMs > 0) retryAt = at + afterMs;
+  if (!retryAt && Number.isFinite(after) && after > 0) {
+    retryAt = at + (after < 1000 ? after * 1000 : after);
+  }
+  return {
+    at,
+    retryAt,
+    detail,
+    attempt: Number(data.attempt ?? data.retry ?? 0) || 0,
+  };
+}
+
 /** The placeholder goes when the turn does, so a ghost post cannot outlive it. */
 function dropLivePost() {
   const msgs = state.messages || [];
@@ -1028,6 +1116,7 @@ function closeReasoningFolds() {
 
 function showNothing() {
   flushClocks();
+  endWait();
   state.view = 'none';
   state.sessionId = null;
   state.messages = [];
@@ -1343,6 +1432,7 @@ function connectStream() {
       state.sessionTrace = { key: '', stream: null };
       state.toolsInFlight.clear();
       state.archCtx = null;
+      endWait();
       state.busy = false;
       state.stopping = false;
       state.stoppingReason = null;
@@ -1848,17 +1938,33 @@ function connectStream() {
       // somewhere to land the moment it starts arriving (10 Nov).
       if (ev.type === EV.textDelta) {
         ensureLivePost();
+        markOutput();
         noteDelta(ev);
         appendStream('word', ev.raw?.data?.delta);
       } else if (ev.type === EV.reasoningDelta) {
         ensureLivePost();
+        markOutput();
         noteDelta(ev);
         appendStream('think', ev.raw?.data?.delta);
+      } else if (ev.type === EV.stepStarted) {
+        // The prompt is behind the model; the next output is generation. The line
+        // may be visible for only a moment, but when a provider is slow this is
+        // where "Waiting for the model" turns into "Thinking".
+        state.wait = waitStep(state.wait, serverNow());
+        stopWaitMetrics();
+        tickWait();
+      } else if (ev.type === EV.retryScheduled) {
+        // A failed attempt is a different answer from "still waiting": it names the
+        // reason and, when the engine gave one, the wait.
+        state.wait = waitRetry(state.wait, retryWaitInfo(ev, serverNow()));
+        stopWaitMetrics();
+        tickWait();
       } else if (ev.type === EV.textEnded || ev.type === EV.reasoningEnded) {
         endStream();
       } else if (turnOver(ev.type)) {
         // The turn is over: nothing may stream into it any more. An interrupt is not the
         // end — the engine starts the next execution at once — so it does not come here.
+        endWait();
         state.sessionTrace.stream = null;
         state.sessionTrace.key = '';
       }
@@ -1937,8 +2043,9 @@ function connectStream() {
           state.hardStop = false;
           // Open the post now, not on the first delta: the model can spend many
           // seconds reading its prompt before it says anything, and the chat used to
-          // sit empty for that whole time (11 Nov). The placeholder says "Thinking…"
-          // until the first reasoning or tool arrives.
+          // sit empty for that whole time (11 Nov). The line says what is known
+          // about the wait — connecting, reading a prompt, waiting, retrying.
+          beginWait(ev.sessionId);
           if (ensureLivePost()) renderTranscript();
         }
         else if (turnOver(ev.type)) {
@@ -2049,6 +2156,9 @@ function wire() {
     }
   }
   setInterval(tickClocks, 1000);
+  // The waiting line's elapsed seconds. This is a text node update, not a render:
+  // the pane, the scroll position and every open fold stay exactly where they are.
+  setInterval(tickWait, 500);
   // A page going away must leave the running `since` behind, not only the banked total.
   window.addEventListener('pagehide', flushClocks);
   // Ctrl + wheel and Ctrl + plus/minus move the chat's text size instead of the

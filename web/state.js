@@ -137,6 +137,10 @@ export const state = {
   compactUntil: 0,
   streaming: false,
   streamLive: false,
+  // The one-line answer to "what is it doing right now": the resumable state built
+  // by web/waiting.js. It lives here, not on a message, because the line must
+  // survive a transcript redraw and must clear when the chat changes.
+  wait: null,
   // When the last engine event arrived, so the sidebar can say "10s" instead of
   // just naming it, and which session it came from: a clock that ages beside an
   // event from a session the operator has deleted is describing something that
