@@ -24,9 +24,9 @@ const prettify = (id) =>
 export const providerLabel = (p) => {
   const id = String(p || 'unknown');
   const configured = (state.config?.engine?.opencode?.providers || []).find((x) => x.id === id);
-  // A local server is labelled by what it *is*, not by the app that happens to
-  // be running it: the next machine's may be Ollama or vLLM, and a badge naming
-  // one of them would be wrong everywhere else.
+  // A local server is labelled by its model prefix, not by the app that happens
+  // to be running it. The prefix is the operator's own name for it and tells two
+  // local servers apart; "Local" for both was the bug (27 Nov).
   if (configured) return providerBadge(configured) || id;
   return prettify(id);
 };

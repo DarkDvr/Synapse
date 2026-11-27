@@ -16,7 +16,7 @@ import { esc } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
-import { readPath, writePath, parseModelLines, slugify } from './settings-data.js';
+import { readPath, writePath, parseModelLines, slugify, providerBadge } from './settings-data.js';
 import { samePath } from './format.js';
 import { SETTINGS_TABS, PANES } from './settings-panes.js';
 import { settingsProviders, providersWiring, providerAt, moveProvider, addProvider, removeProvider, selectProvider, refreshProviderModels } from './providers.js';
@@ -251,6 +251,19 @@ export function switchSettingsTab(id) {
   }
 }
 
+// The selected provider's row is outside the form being edited, so a name or a
+// model prefix typed here has to be mirrored into it by hand. Re-rendering the
+// pane on every keystroke would take the caret with it; this updates the two
+// things the row shows and leaves the field alone.
+function refreshProviderRow(p) {
+  const row = $('settingsBody')?.querySelector(`[data-prov-row="${state.setProvSelected}"]`);
+  if (!row) return;
+  const badge = row.querySelector('.prov-type');
+  if (badge) badge.textContent = providerBadge(p);
+  const name = row.querySelector('.prov-name');
+  if (name) name.textContent = String(p?.name || '').trim() || 'Untitled provider';
+}
+
 // The editor's fields write straight into the selected draft provider: there is
 // no data-path for them because a provider is an object in a list, not a path.
 export function onSettingsInput(e) {
@@ -336,17 +349,17 @@ export function onSettingsInput(e) {
     p.id = slugify(el.value);
     p.idTouched = true;
     el.value = p.id;
+    refreshProviderRow(p);
     return;
   }
   if (field === 'name') {
-    const row = $('settingsBody').querySelector(`[data-prov-row="${state.setProvSelected}"] .prov-name`);
-    if (row) row.textContent = el.value.trim() || 'Untitled provider';
     // A new provider's prefix follows its name until it is typed by hand.
     if (p.idTouched === false) {
       p.id = slugify(el.value);
       const prefix = $('settingsBody').querySelector('[data-prov="id"]');
       if (prefix) prefix.value = p.id;
     }
+    refreshProviderRow(p);
   }
 }
 

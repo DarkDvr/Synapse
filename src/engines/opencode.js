@@ -820,6 +820,11 @@ export class OpenCodeEngine extends Engine {
     const data = Array.isArray(r?.data) ? r.data : [];
     const messages = data.map(normalizeMessage);
     messages.sort((a, b) => (a.created || 0) - (b.created || 0));
+    // The engine returns a cursor even for a one-message page, so the cursor alone
+    // is not proof of an older page. A full page is; a short page is the start of
+    // the timeline. Without this test, a brand-new project showed Load Earlier and
+    // the click loaded nothing.
+    const older = data.length >= limit ? r?.cursor?.next ?? null : null;
     return {
       messages,
       cursor: {
@@ -827,7 +832,7 @@ export class OpenCodeEngine extends Engine {
         next: r?.cursor?.next ?? null,
         // With `order=desc`, the engine puts the older page on `next`; a cursor
         // request continues in that same direction. Name it once for callers.
-        older: r?.cursor?.next ?? null,
+        older,
       },
     };
   }

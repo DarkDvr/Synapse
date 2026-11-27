@@ -211,9 +211,9 @@ export function openModelMenu(role, fromTyping) {
   menuRole = role;
   if (!fromTyping) p.input.select();
   const q = fromTyping ? p.input.value.trim().toLowerCase() : '';
-  // The operator's own order, from Settings > Providers. Two servers with the
-  // same badge ("Local") are two different providers here, and the label no
-  // longer decides where a group sits (4 Nov).
+  // The operator's own order, from Settings > Providers. Two providers with the
+  // same badge are still two different providers here, and the label no longer
+  // decides where a group sits (4 Nov).
   const order = providerOrderOf(state.config);
   const rankOf = (id) => {
     const at = order.indexOf(String(id));

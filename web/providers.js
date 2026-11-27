@@ -66,11 +66,11 @@ function providerEditor(providers, index) {
               : 'A local server that reports its window at /api/v0/models.'
         }</small>
       </label>
-      <label class="set-field" title="The name on the badge beside this provider's models in every role's menu.">
+      <label class="set-field" title="The provider's display name. A local provider's badge uses its model prefix instead, so two local servers stay distinct in the menus.">
         <span>Name</span>
         <input data-prov="name" value="${esc(p.name || '')}" placeholder="DeepSeek" />
       </label>
-      <label class="set-field" title="The word before the slash in every model name this provider serves — opencode/deepseek. Filled from the name until you change it here, and two providers cannot share one: a provider the engine already serves keeps its models only when the two match.">
+      <label class="set-field" title="The word before the slash in every model name this provider serves — opencode/deepseek. Filled from the name until you change it here, and two providers cannot share one: a provider the engine already serves keeps its models only when the two match. On a local provider this word is also the badge in the menus.">
         <span>Model prefix</span>
         <input data-prov="id" value="${esc(p.id || '')}" placeholder="${esc(previewId)}" spellcheck="false" autocomplete="off" />
       </label>

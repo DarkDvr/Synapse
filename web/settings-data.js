@@ -90,9 +90,18 @@ export function isLocalServer(p) {
   return false;
 }
 
-/** The badge beside this provider's models: 'Local' for anything on this machine,
- *  its own name for a vendor. One badge for every local server, whichever dialect
- *  it speaks — labelling llamacpp separately split the picker in two. */
+/** The badge beside this provider's models: a vendor's own name, or a local
+ *  server's model prefix. One "Local" badge for every server on this machine made
+ *  two local providers indistinguishable in Settings and in the model menu, so the
+ *  prefix is the label now. A prefix of "local" says nothing extra, so the name
+ *  stands in for it. */
 export function providerBadge(p) {
-  return isLocalServer(p) ? 'Local' : p?.name || '';
+  const name = String(p?.name || '').trim();
+  if (!isLocalServer(p)) return name;
+  // A brand-new local provider is called "Local Server" until the operator names
+  // it; its badge stays the short word rather than echoing that whole label.
+  if (/^local server$/i.test(name)) return 'Local';
+  const prefix = String(p?.id || '').trim();
+  if (prefix && prefix.toLowerCase() !== 'local') return prefix;
+  return name || 'Local';
 }
