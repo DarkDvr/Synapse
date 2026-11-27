@@ -2870,7 +2870,14 @@ body.is-paused .chat-dock { animation: pause-glow 1.6s ease-in-out infinite; }
 /* The right-hand column of a step: the role badge, and under it the step's own
    stopwatch. That stack is what makes two lines the minimum height of a row, which
    is the point — the clock has to fit under the badge, not beside it. */
-.plan-side { display: grid; justify-items: end; gap: 4px; }
+.plan-side {
+  /* The role chip owns the top-right corner, the stopwatch the bottom-right:
+     stretch the column to the row's height and push the two apart. Centring the
+     pair left both floating in the middle, which read as a misaligned stack once
+     a title ran to three lines. */
+  display: grid; align-self: stretch; align-content: space-between;
+  justify-items: end; gap: 4px;
+}
 .plan-role {
   font-family: var(--mono); font-size: 10px; line-height: 1; padding: 3px 6px;
   border-radius: 5px; background: var(--violet-faint); color: #b9b5ff;

@@ -46,7 +46,7 @@ function project(name) {
 /** A turn-by-turn stub. `script` is consumed one entry per turn; the last entry
  *  repeats. `{ silent: true }` starts a turn that never closes — the shape of a
  *  session the engine has silently lost. */
-function makeEngine({ dir, script, wakeScript }) {
+function makeEngine({ dir, script, wakeScript, hangWakeRead = false }) {
   const sessions = new Map();
   const woke = [];
   const descriptions = [];
@@ -55,6 +55,7 @@ function makeEngine({ dir, script, wakeScript }) {
   const deleted = [];
   const prompts = [];
   let seq = 0;
+  let hungWakeRead = false;
 
   const startTurn = (id) => {
     const s = sessions.get(id);
@@ -110,6 +111,13 @@ function makeEngine({ dir, script, wakeScript }) {
       push(id, { id: `${id}-s${woke.length}`, type: 'synthetic', parts: [{ type: 'text', text }] });
     },
     async getMessages(id) {
+      // The wake path first reads the Architect's transcript only to remember
+      // where its turn began. A read that never answers used to hold the whole
+      // report; the runner must time it out and send the synthetic anyway.
+      if (hangWakeRead && id === 'ses_arch' && !hungWakeRead) {
+        hungWakeRead = true;
+        return new Promise(() => {});
+      }
       const s = sessions.get(id);
       return s ? [...s.messages] : [];
     },
@@ -123,10 +131,10 @@ function makeEngine({ dir, script, wakeScript }) {
   return { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts };
 }
 
-async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, stopWakeAfter = 0, untilWoke = 1, harnessStopAfter = 0, harnessReason = '', delegates = 1 }) {
+async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, stopWakeAfter = 0, untilWoke = 1, harnessStopAfter = 0, harnessReason = '', delegates = 1, hangWakeRead = false }) {
   const dir = project(name);
   const runsFile = path.join(dir, '.project', 'runs.jsonl');
-  const { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts } = makeEngine({ dir, script, wakeScript });
+  const { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts } = makeEngine({ dir, script, wakeScript, hangWakeRead });
   const events = [];
   const noted = [];
   const logged = [];
@@ -365,6 +373,15 @@ expect('wake: second attempt says continue', /continue/i.test(woken.woke[1] || '
 expect(
   'wake: retry announced',
   woken.events.some((e) => e.kind === 'role-error' && e.role === 'architect' && e.retrying),
+);
+
+// 6a. The baseline read is not the report. If it never answers, the wake must
+// still go out: three runs on 27 Nov completed with no synthetic and no error.
+const hungRead = await runCase({ name: 'hung-wake-read', script: [{}], hangWakeRead: true });
+expect(
+  'wake: a transcript read that never answers does not swallow the report',
+  hungRead.woke.length === 1,
+  `woke=${hungRead.woke.length}`,
 );
 
 // 6b. Stop on the Architect ends the wake loop: no retry, no second synthetic.

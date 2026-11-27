@@ -263,6 +263,25 @@ const sleep = (ms, signal, wake) =>
     wake?.addEventListener?.('abort', done, { once: true });
   });
 
+/**
+ * Wait for a promise, but not for ever. A report must not be held hostage by a
+ * read that is only there to establish a baseline: on 27 Nov the Architect was
+ * never woken after three completed runs, and the first await in the wake path
+ * was an engine transcript read with no deadline.
+ */
+const within = (ms, promise, fallback) =>
+  new Promise((resolve) => {
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(fallback), Math.max(0, ms));
+    Promise.resolve(promise).then(finish, () => finish(fallback));
+  });
+
 /** A one-shot wake-up for a run that is asleep between provider retries. An
  *  AbortSignal cannot be reused, so every wait that survives a wake gets a fresh
  *  one — see the retry branch of run(). */
@@ -3840,9 +3859,19 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
         out.warn(`wake for ${dir} was NOT sent: it was stopped before the Architect heard anything`);
         return { ok: false, stopped: true };
       }
+      // This read is only the baseline for the turn watch. It used to be able to
+      // hold the whole report: a transcript read that never answered meant no
+      // synthetic, no wake and no error, which is exactly the silent failure the
+      // 27 Nov runs left behind. Ten seconds is many times a local read; after
+      // that the report goes first and the baseline stays empty.
       let before = '';
       try {
-        before = markOf(await engine.getMessages(architectId));
+        const marked = await within(10_000, engine.getMessages(architectId).then(markOf), null);
+        if (marked === null) {
+          out.warn(`wake for ${dir}: the Architect's transcript did not answer in 10s; sending the report anyway`);
+        } else {
+          before = marked;
+        }
       } catch { /* the send below will surface it */ }
 
       try {
