@@ -13,7 +13,7 @@ import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
 import { projectOf, runIn, dirKey, waitingIn } from './run-view.js';
-import { pruneRoleRates } from './role-rate-store.js';
+import { pruneRoleRates, forgetRoleRates } from './role-rate-store.js';
 
 const missing = (name) => () => {
   throw new Error(`projects.js: ${name} was not wired at boot`);
@@ -187,6 +187,35 @@ export function pruneFolderState() {
   for (const key of [...state.rates.keys()]) if (!folders.has(key)) state.rates.delete(key);
   pruneRoleRates(folders);
   state.alarms = state.alarms.filter((a) => !a.dir || folders.has(dirKey(a.dir)));
+}
+
+/**
+ * Drop everything the page knows about one folder, while the folder is still a
+ * project — which is the moment the prune above cannot see.
+ *
+ * A wipe deletes a folder and makes it again under the same name in the same breath,
+ * so "is this folder still a project" never answers no. The old project's runs, its
+ * traces, its token rates, its role readings, its leases and its alarm lines were all
+ * keyed by that path, and the new conversation would have drawn them above itself —
+ * a deleted run's timer under a brand-new chat. The server clears the chat; this
+ * clears what the page kept beside it.
+ */
+export function forgetProjectState(dir) {
+  const key = dirKey(dir);
+  if (!key) return;
+  for (const [k, trace] of [...state.traces]) {
+    if (dirKey(trace?.dir) === key) state.traces.delete(k);
+  }
+  for (const [k, lease] of [...state.leases]) {
+    if (dirKey(lease?.dir) === key) state.leases.delete(k);
+  }
+  for (const k of [...state.roleErrors.keys()]) {
+    if (String(k).startsWith(`${key}|`)) state.roleErrors.delete(k);
+  }
+  state.runs.delete(key);
+  state.rates.delete(key);
+  state.alarms = state.alarms.filter((a) => !(a?.dir && dirKey(a.dir) === key));
+  forgetRoleRates(dir);
 }
 
 /** Has this project's conversation been used at all (as opposed to just opened)? */

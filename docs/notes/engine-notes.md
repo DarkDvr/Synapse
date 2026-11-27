@@ -197,7 +197,9 @@ for it.
   undeletable. The release is `DELETE /api/debug/location?location[directory]=<dir>`; it **works** and is
   **asynchronous** (an immediate delete failed, the same delete a second later succeeded), so
   `evictLocation()` polls `GET /api/debug/location` until it is gone (30 × 100ms). `deleteProject` evicts
-  and waits (281ms measured); `wipeProjectDir` evicts, retries `fs.rmSync`, then fails with 423.
+  and waits (281ms measured); `wipeProjectDir` evicts, deletes the folder within a 12 s deadline, then
+  clears every session keyed to that path and forgets the project row. A folder that will not go is a 423
+  that names it and creates nothing — clearing only the files used to hand the new project the old chat.
 - **The project row is the whole project UI.** No panel, no path label: one row whose
   Browse/Cmd/Rename/Delete live in a `⋯` menu, and `POST /api/projects/{id}/open` spawns a detached GUI
   process with array args. **A command prompt needs `start`**: `spawn('cmd.exe', ['/K','cd','/d',dir])`

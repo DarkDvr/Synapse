@@ -258,7 +258,15 @@ export function folderNameProblem(folder) {
   return null;
 }
 
-export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, traceReasons, inspectModel: inspectRef, probeDir, runs, desk, localLease, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, providerSync, permissionLog, permissionGate, permissionMemory }) {
+export function createApi({ getConfig, applyConfig, power, engine, logger, getBootError, projects, toolStats, probe, modelCache, traceReasons, inspectModel: inspectRef, probeDir, runs, desk, localLease, engineUpdate, synapseUpdate, restart, stopSelf, pcShutdown, notify, providerSync, permissionLog, permissionGate, permissionMemory,
+  // The folder a wipe may delete from, how long it waits for Windows to let go, and
+  // the note a deleted project leaves for the engine's next start. All three are the
+  // harness's own defaults; a test supplies its own so it never touches the
+  // operator's projects or the live `data\` folder.
+  projectsRoot = PROJECTS_ROOT,
+  wipeTimeoutMs = 12_000,
+  notePurge = noteDeletedProject,
+}) {
   const app = logger.channel('app');
   // One guard per chat the operator drives: the Architect's own turn has no run, and
   // nothing was watching it (13 Nov).
@@ -1363,6 +1371,104 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     return { directory: to, from, sessions: engineMove?.sessions || 0 };
   }
 
+  /**
+   * Every engine session that ran in a folder.
+   *
+   * A project's conversation is whatever the engine keeps keyed to its directory: the
+   * chat, a worker's run session, the model's own subagents. This is the list that has
+   * to be empty before a folder can honestly be called fresh.
+   */
+  async function sessionsInDir(dir) {
+    const all = await engine.listSessions();
+    return (Array.isArray(all) ? all : []).filter((s) => s?.id && normDir(s.directory) === normDir(dir));
+  }
+
+  /**
+   * Delete every engine session in a folder, and say which ones survived.
+   *
+   * The answer is read back from the engine, not assumed from the delete calls: a
+   * route that answered 200 has not proved the row is gone, and a row that survived
+   * would come back as the project's chat on the next open.
+   */
+  async function clearSessionsInDir(dir) {
+    let sessions = [];
+    try {
+      sessions = await sessionsInDir(dir);
+    } catch (err) {
+      throw fail(
+        409,
+        `Synapse could not ask the engine which chats are in ${dir} (${err.message}), so it cannot promise a fresh start. Nothing was deleted.`,
+      );
+    }
+    for (const session of sessions) {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          await engine.deleteSession(session.id);
+          briefed.delete(session.id);
+          permissionMemory?.forgetSession?.(session.id);
+          break;
+        } catch (err) {
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 150));
+            continue;
+          }
+          app.warn(`could not delete the conversation ${session.id} of ${dir}: ${err.message}`);
+        }
+      }
+    }
+    let left = sessions.map((s) => s.id);
+    try {
+      left = (await sessionsInDir(dir)).map((s) => s.id);
+    } catch { /* the engine stopped answering; the ids we tried stay listed as suspect */ }
+    return { cleared: Math.max(0, sessions.length - left.length), left };
+  }
+
+  /**
+   * Delete a project folder, waiting for Windows to let go of it.
+   *
+   * A file another program has open is not deleted and the folder stays; Windows
+   * usually releases it a moment later, so the delete is retried rather than failed on
+   * the first refusal. The wait is bounded, because a wipe is a request the page is
+   * holding the operator's click on: past the deadline the answer is an error that
+   * names the path, never a spinner with no end.
+   */
+  async function removeFolder(dir, deadlineMs) {
+    const started = Date.now();
+    let last = null;
+    for (;;) {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 });
+        last = null;
+      } catch (err) {
+        last = err;
+      }
+      if (!fs.existsSync(dir)) return { ok: true, error: null };
+      if (Date.now() - started >= Math.max(0, Number(deadlineMs) || 0)) break;
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    return { ok: false, error: last || new Error(`${dir} is still there`) };
+  }
+
+  /** The operator's sentence for a folder Windows would not let go of. */
+  function wipeRefusal(dir, err) {
+    let file = String(err?.path || '');
+    // Node reports the long-path form; the operator reads the path they know.
+    if (file.startsWith('\\\\?\\')) file = file.slice(4);
+    const named = file && normDir(file) !== normDir(dir) ? file : '';
+    const code = String(err?.code || '');
+    const held =
+      ['EPERM', 'EACCES', 'EBUSY', 'ENOTEMPTY'].includes(code) ||
+      /being used|denied|in use|locked/i.test(String(err?.message || ''));
+    if (held) {
+      return (
+        `Could not clear ${dir}: ${named ? `"${named}"` : 'the folder'} could not be deleted because something on this machine is using it. ` +
+        'A program a model started there, a browser showing a page from it, Explorer or a scanner will do that. ' +
+        'The old files are still there and nothing was created — close what is holding it and try again.'
+      );
+    }
+    return `Could not clear ${dir}: ${err?.message || 'the filesystem did not say why'}. Nothing was created.`;
+  }
+
   return {
     browserSignin,
     browserForget,
@@ -1976,6 +2082,35 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           }
         } catch { /* a directory we cannot read is the project's problem, not this call's */ }
       }
+      // A folder Synapse is about to create is empty, so a conversation the engine
+      // still keeps for that path cannot belong to it — it is what a wipe could not
+      // clear, and adopting it is precisely the "new project opens the old chat"
+      // failure. Removing it here is the belt: the wipe clears it, and this refuses to
+      // build on a path the engine still has a chat for.
+      if (dir && !fs.existsSync(dir) && engine.status().ready) {
+        try {
+          const stale = await sessionsInDir(dir);
+          if (stale.length) {
+            const result = await clearSessionsInDir(dir);
+            app.info(`a new folder inherited ${result.cleared} old conversation(s) from ${dir} and they were removed`);
+            if (result.left.length) {
+              throw fail(
+                423,
+                `The folder ${dir} is new, but the engine still holds ${result.left.length} old conversation(s) from that path ` +
+                  `(${result.left.join(', ')}). Synapse will not register a project that would open one of them. ` +
+                  'Nothing was registered; try again.',
+              );
+            }
+            try {
+              await engine.forgetProject?.(dir);
+            } catch { /* the store cleanup is best effort; the sessions are what mattered */ }
+          }
+        } catch (err) {
+          // A refusal above is the answer; an engine that could not be asked is not.
+          if (err?.status) throw err;
+          app.warn(`could not check ${dir} for an old conversation: ${err.message}`);
+        }
+      }
       const project = projects.create({ name: body?.name, directory: body?.directory });
       // The store gives it `.project\plan.json` and its scratch folder, whether
       // the folder was new or already there. Re-adding a project continues its
@@ -2145,51 +2280,117 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     },
 
     /**
-     * Wipe a project folder so a fresh project can start in it.
+     * Empty a project folder so a fresh project can start in it.
      *
-     * Deliberately narrow: only a directory *inside* the projects root, never the
-     * root itself, never General's folder. The engine is told to release the
-     * location first — that handle is the only reason a folder could not be
-     * deleted while Synapse runs.
+     * "Start fresh" has to mean fresh: the folder *and* the conversation the engine
+     * keeps keyed to that path. Clearing only the files was not enough — a project is
+     * its directory, so a folder made again under the same name was handed the old
+     * chat as its own, and the operator's new project opened onto the conversation
+     * they had just asked to delete (28 Nov). The wipe is therefore one operation in
+     * three parts: the folder (bounded by a deadline), every session that ran in it,
+     * and the engine's own project row. The registry entry goes too, or the folder
+     * would come back under two names.
+     *
+     * Deliberately narrow: only a directory *inside* the projects root, never the root
+     * itself. The engine is told to release the location first — that handle is the
+     * one reason a folder could not be deleted while Synapse runs.
      */
     wipeProjectDir: async (body) => {
       const dir = String(body?.directory || '').trim();
       if (!dir) {
         throw fail(400, 'a directory is required');
       }
-      const guarded = entryBlockingWrite(dir, getConfig() || {}, { operator: true });
+      const target = path.resolve(dir);
+      const guarded = entryBlockingWrite(target, getConfig() || {}, { operator: true });
       if (guarded) {
-        throw fail(403, `${dir} is protected (${guarded.label}) and cannot be deleted`);
+        throw fail(403, `${target} is protected (${guarded.label}) and cannot be deleted`);
       }
-      const rel = path.relative(PROJECTS_ROOT, path.resolve(dir));
+      const rel = path.relative(projectsRoot, target);
       if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
-        throw fail(400, `refusing to wipe ${dir}: it is not inside ${PROJECTS_ROOT}`);
+        throw fail(400, `refusing to wipe ${target}: it is not inside ${projectsRoot}`);
       }
-      try {
-        await engine.evictLocation?.(dir);
-      } catch (err) {
-        app.warn(`could not release ${dir} before wiping it: ${err.message}`);
-      }
-      // Even a confirmed release can leave the filesystem a tick behind, so the
-      // delete is retried briefly rather than failing on the first EBUSY.
-      let lastError = null;
-      for (let i = 0; i < 10; i += 1) {
+      // The registry is read before anything is deleted: once the folder is gone the
+      // entry is no longer listed, so afterwards there would be nothing to remove.
+      const registered = projects.list().filter((p) => normDir(p.directory) === normDir(target));
+      const wasPrivate = isPrivateDir(target);
+      if (fs.existsSync(target)) {
+        if (!engine.status().ready) {
+          throw fail(
+            409,
+            `The engine is not running, so Synapse cannot clear the old conversation in ${target}. Nothing was deleted.`,
+          );
+        }
+        let sessions = [];
         try {
-          fs.rmSync(dir, { recursive: true, force: true });
-          lastError = null;
-          break;
+          sessions = await sessionsInDir(target);
         } catch (err) {
-          lastError = err;
-          await new Promise((r) => setTimeout(r, 150));
+          throw fail(409, `Synapse could not ask the engine about ${target} (${err.message}). Nothing was deleted.`);
+        }
+        if (sessions.length) {
+          const newest = [...sessions].sort((a, b) => (a.created || 0) - (b.created || 0)).pop();
+          const busy = await busyFor(newest.id);
+          if (busy.busy) throw refuseBusy(busy);
+        }
+        // A message waiting for the local server belongs to this folder: it goes with
+        // the project rather than firing at a chat that is being deleted.
+        localLease?.dropDir(target);
+        try {
+          await engine.evictLocation?.(target);
+        } catch (err) {
+          app.warn(`could not release ${target} before wiping it: ${err.message}`);
+        }
+        const removal = await removeFolder(target, wipeTimeoutMs);
+        if (!removal.ok) {
+          app.warn(`wipe refused for ${target}: ${removal.error?.message || 'the folder would not go'}`);
+          throw fail(423, wipeRefusal(target, removal.error));
         }
       }
-      if (lastError) {
-        const e = new Error(`could not delete ${dir}: ${lastError.message}`);
-        e.status = 423; // locked
-        throw e;
+
+      // The folder is gone; the conversation and the engine's memory of the path are
+      // not. A stale chat is exactly what a "fresh" project must not inherit, so this
+      // is verified against the engine rather than assumed from the delete calls.
+      let cleared = 0;
+      if (engine.status().ready) {
+        const result = await clearSessionsInDir(target);
+        cleared = result.cleared;
+        if (result.left.length) {
+          app.warn(`wipe left ${result.left.length} conversation(s) in ${target}`);
+          throw fail(
+            423,
+            `The folder was cleared, but the engine still holds ${result.left.length} old conversation(s) from ${target} ` +
+              `(${result.left.join(', ')}), and a new project there would open one of them. ` +
+              'No project was created — run the wipe again.',
+          );
+        }
+        try {
+          await engine.forgetProject?.(target);
+        } catch (err) {
+          app.warn(`could not forget ${target} in the engine store: ${err.message}`);
+        }
+        notePurge();
       }
-      app.info(`wiped project folder: ${dir}`);
-      return { ok: true, removed: !fs.existsSync(dir) };
+      for (const project of registered) {
+        try {
+          projects.remove(project.id);
+        } catch (err) {
+          app.warn(`could not remove the registry entry of "${project.name}": ${err.message}`);
+        }
+      }
+      if (wasPrivate) {
+        // The folder is deleted, but the diaries and the shell's console are ours.
+        purgePrivateTraces({ dir: target });
+        purgeEngineLog({ dir: target });
+        requestConsolePurge(target);
+        removePrivateDir(target);
+      }
+      app.info(`wiped project folder: ${target} (${cleared} conversation(s) deleted)`);
+      return {
+        ok: true,
+        removed: !fs.existsSync(target),
+        directory: target,
+        sessions: cleared,
+        forgotten: registered.length,
+      };
     },
 
     /**
@@ -2387,7 +2588,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       // VACUUM. That waits for the next engine start (engine-purge.js); the note
       // carries only a count, so it names nothing.
       try {
-        noteDeletedProject();
+        notePurge();
       } catch (err) {
         app.warn(`could not note the deleted project for engine housekeeping: ${err.message}`);
       }

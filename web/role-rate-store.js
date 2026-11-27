@@ -96,4 +96,20 @@ export function pruneRoleRates(folders) {
   save();
 }
 
+/**
+ * Forget one project's readings, folder still standing.
+ *
+ * The prune above asks "which folders are still projects", and a wiped folder is
+ * about to be one again within the same breath — so it never fires. A wipe asks this
+ * directly: the numbers described a project that no longer exists.
+ */
+export function forgetRoleRates(dir) {
+  if (!state.roleRates || !dir) return;
+  const prefix = `${normDir(dir)}\u0000`;
+  for (const key of [...state.roleRates.keys()]) {
+    if (key.startsWith(prefix)) state.roleRates.delete(key);
+  }
+  save();
+}
+
 export { STORAGE_KEY };

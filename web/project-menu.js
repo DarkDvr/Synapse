@@ -20,9 +20,10 @@ import {
   newestSession,
   sessionWorking,
   projectChatOpen,
+  forgetProjectState,
 } from './projects.js';
 import { chatBody } from './mode.js';
-import { projectOf, waitingIn } from './run-view.js';
+import { projectOf, waitingIn, dirKey } from './run-view.js';
 import { ago } from './format.js';
 
 const missing = (name) => () => {
@@ -382,7 +383,7 @@ export function clashBody(info) {
         `<blockquote class="clash-goal" title="${esc(info.plan.goal)}">${esc(info.plan.goal)}</blockquote>`
       : '') +
     `<p class="clash-note">Re-using continues that plan where it left off. ` +
-    `Deleting removes the folder and everything inside it — that cannot be undone.</p>`
+    `Deleting removes the folder, its conversation and everything inside it — that cannot be undone.</p>`
   );
 }
 
@@ -438,8 +439,25 @@ export async function addProject() {
       });
       if (!choice) return; // cancelled: nothing created, nothing deleted
       if (choice === 'wipe') {
-        await api('POST', '/api/projects/wipe', { directory });
-        toast('Folder Wiped', `"${directory}" is empty — starting fresh.`);
+        // The old project is a folder *and* a conversation, and the page holds state
+        // for both. They go before anything is made again under this path — otherwise
+        // the new project opens the old chat and draws the old run's timer above it.
+        const old = state.projects.find((p) => dirKey(p.directory) === dirKey(directory));
+        try {
+          const cleared = await api('POST', '/api/projects/wipe', { directory });
+          forgetProjectState(directory);
+          if (old && projectOf(state.sessionId)?.id === old.id) wired.showNothing();
+          const gone = Number(cleared?.sessions) || 0;
+          toast(
+            'Folder And Chat Cleared',
+            `${gone ? `Its old conversation (${gone}) is gone. ` : ''}"${directory}" starts empty.`,
+          );
+        } catch (err) {
+          // A folder that will not clear is the end of the request: making the
+          // project anyway is exactly how the old chat came back.
+          toast('Could Not Clear The Folder', err.message);
+          return;
+        }
       }
     }
     const made = await api('POST', '/api/projects', { name: name || undefined, directory });

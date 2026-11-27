@@ -303,6 +303,22 @@ it, and the conversation lives in the engine keyed by directory. So:
   is mid-turn, and refused for a name Windows cannot create.
 - **Deleting takes everything**: the chat, the folder, the plan. It is refused while
   the project is working.
+- **Wiping a folder is a cleanse, not only a delete.** "Delete Folder And Start Fresh"
+  exists because a reused name resolves to the same path, so the folder, its plan and
+  its conversation are all still there. Clearing only the files was not enough: a
+  project *is* its directory, so the engine still held the old chat keyed to that path
+  and the new project opened onto the conversation that had just been deleted (28 Nov).
+  A wipe is one operation now: the folder, every session that ran in it (the chat, a
+  worker's session, the model's own subagents), the engine's project row and the
+  registry entry — and the page drops the runs, traces, rates, leases and alarms it
+  kept for that folder, because a folder that is wiped and made again in the same
+  breath never looks missing to the rail's usual prune.
+  The folder delete is retried to a deadline (12 s) and then refused with 423 naming
+  the path — a file another program is holding is the usual reason — and nothing is
+  created on top of it. The session deletes are verified against the engine rather
+  than assumed, for the same reason. A folder Synapse creates is checked for stale
+  sessions first: one surviving chat is enough to hand the new project the old
+  conversation, and a 423 is better than that.
 
 ## Private projects
 
