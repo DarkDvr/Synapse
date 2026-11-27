@@ -1813,7 +1813,8 @@ export function briefSession({ dir, role = 'architect', auto = false, single = f
     lines.push(
       `A task whose deliverable can be proved by a command carries "checks": one to three short commands that ` +
         `must exit 0. The harness runs them when the worker says it is done, and a failure goes back to the ` +
-        `worker once; keep each under two minutes, inside the project, and never destructive.`,
+        `worker once; keep each under two minutes, inside the project, and never destructive. A command with ` +
+        `no shell operator runs as written; one using |, && or > runs in cmd.exe, where arguments need double quotes.`,
     );
     lines.push(
       auto

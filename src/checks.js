@@ -25,6 +25,119 @@ export const CHECK_TIMEOUT_MS = 120_000;
 const COMMAND_MAX = 300;
 const OUTPUT_MAX = 8000;
 
+/**
+ * Split a command line into the program and its arguments.
+ *
+ * A check is written the way a person writes a command, and on this machine that
+ * means POSIX-style single quotes around an argument — the shipped visual-review
+ * skill's own documented command is `--expect '#result|^0$'`. cmd.exe does not know
+ * that quoting: it read the `|` as a pipe and executed `^0$' --audit` as a program, so
+ * a check that passed in the worker's own shell failed in the harness with `'0$'' is
+ * not recognized ...` (28 Nov, t2). Splitting the line here and spawning without a
+ * shell means no shell can reinterpret an argument.
+ *
+ * Returns null when the line cannot be split (an unclosed quote); the caller then
+ * falls back to a shell rather than guessing at the operator's intent.
+ */
+export function splitCommand(command) {
+  const text = String(command || '');
+  const argv = [];
+  let current = '';
+  let started = false;
+  const push = () => {
+    if (!started) return;
+    argv.push(current);
+    current = '';
+    started = false;
+  };
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === ' ' || ch === '\t') {
+      push();
+      i += 1;
+      continue;
+    }
+    if (ch === "'") {
+      started = true;
+      i += 1;
+      const end = text.indexOf("'", i);
+      if (end === -1) return null;
+      current += text.slice(i, end);
+      i = end + 1;
+      continue;
+    }
+    if (ch === '"') {
+      started = true;
+      i += 1;
+      let closed = false;
+      while (i < text.length) {
+        if (text[i] === '\\' && text[i + 1] === '"') {
+          current += '"';
+          i += 2;
+          continue;
+        }
+        if (text[i] === '"') {
+          closed = true;
+          i += 1;
+          break;
+        }
+        current += text[i];
+        i += 1;
+      }
+      if (!closed) return null;
+      continue;
+    }
+    // A backslash is a path separator here, never an escape: `C:\dev\x.js` is one
+    // argument, which is how the command was written.
+    started = true;
+    current += ch;
+    i += 1;
+  }
+  push();
+  return argv.length ? argv : null;
+}
+
+/**
+ * Does this command line use the shell itself — a pipe, a redirect, `&&`, or a
+ * `%VAR%`?
+ *
+ * Only those need cmd.exe, and only those pay its quoting rules. A line with none of
+ * them is spawned as the program and arguments it names, so a quoted argument arrives
+ * exactly as written.
+ */
+export function hasShellSyntax(command) {
+  const text = String(command || '');
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inSingle) {
+      if (ch === "'") inSingle = false;
+      continue;
+    }
+    if (inDouble) {
+      if (ch === '\\' && text[i + 1] === '"') {
+        i += 1;
+        continue;
+      }
+      if (ch === '"') inDouble = false;
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      continue;
+    }
+    if (ch === '|' || ch === '&' || ch === '>' || ch === '<') return true;
+    if (ch === '%' && /^%[^%\s]+%/.test(text.slice(i))) return true;
+  }
+  return false;
+}
+
 /** The checks a plan row may carry, or [] when it carries none. */
 export function parseChecks(value) {
   if (!Array.isArray(value)) return [];
@@ -109,27 +222,13 @@ export function runCheck(command, { cwd, timeoutMs = CHECK_TIMEOUT_MS, signal } 
       finish(130, { aborted: true });
     };
 
-    try {
-      child = spawn(command, {
-        cwd,
-        shell: true,
-        windowsHide: true,
-        env: { ...process.env },
-      });
-    } catch (err) {
-      finish(1, { output: `could not start the check: ${err.message}` });
-      return;
-    }
-
-    if (signal) {
-      if (signal.aborted) return onAbort();
-      signal.addEventListener('abort', onAbort, { once: true });
-    }
-
-    timer = setTimeout(() => {
-      killTree();
-      finish(124, { timedOut: true });
-    }, Math.max(500, timeoutMs));
+    // A command with no shell syntax is run as the program and arguments it names;
+    // one that uses the shell keeps cmd.exe, because a pipe or a redirect has to be
+    // interpreted by one. A command that will not spawn without a shell — `npm`,
+    // which is `npm.cmd`, or a `.cmd` in the project — is retried through it once, so
+    // the one case that needs cmd.exe still works.
+    const argv = splitCommand(command);
+    let viaShell = !argv || hasShellSyntax(command);
 
     const take = (chunk) => {
       const text = String(chunk);
@@ -139,10 +238,51 @@ export function runCheck(command, { cwd, timeoutMs = CHECK_TIMEOUT_MS, signal } 
         truncated = true;
       }
     };
-    child.stdout?.on('data', take);
-    child.stderr?.on('data', take);
-    child.on('error', (err) => finish(1, { output: `could not run the check: ${err.message}` }));
-    child.on('close', (code) => finish(typeof code === 'number' ? code : 1));
+
+    const attempt = (useShell) => {
+      viaShell = useShell;
+      try {
+        child = useShell
+          ? spawn(command, { cwd, shell: true, windowsHide: true, env: { ...process.env } })
+          : spawn(argv[0], argv.slice(1), { cwd, windowsHide: true, env: { ...process.env } });
+      } catch (err) {
+        // Node refuses a `.cmd`/`.bat` synchronously on Windows: only a shell can
+        // start one, which is the same case an ENOENT reports on other versions.
+        if (!useShell && (err?.code === 'ENOENT' || err?.code === 'EINVAL')) {
+          attempt(true);
+          return;
+        }
+        finish(1, { output: `could not start the check: ${err.message}` });
+        return;
+      }
+      const started = child;
+      const mine = () => started === child;
+      child.stdout?.on('data', take);
+      child.stderr?.on('data', take);
+      child.on('close', (code) => {
+        if (!mine()) return;
+        finish(typeof code === 'number' ? code : 1);
+      });
+      child.on('error', (err) => {
+        if (!mine()) return;
+        if (!useShell && (err.code === 'ENOENT' || err.code === 'EINVAL')) {
+          attempt(true);
+          return;
+        }
+        finish(1, { output: `could not run the check: ${err.message}` });
+      });
+    };
+
+    if (signal) {
+      if (signal.aborted) return onAbort();
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+    timer = setTimeout(() => {
+      killTree();
+      finish(124, { timedOut: true });
+    }, Math.max(500, timeoutMs));
+
+    attempt(viaShell);
   });
 }
 
@@ -178,13 +318,31 @@ function saveLog(dir, taskId, command, result) {
  * the worker cannot install it, and asking it to try walks it into protected system
  * folders. That is what happened on 16 Nov with a `Get-FileHash` check that worked in
  * the worker's shell but not in the harness's check process (17 Nov).
+ *
+ * The harness names the two ways a check can be unrunnable apart: a program that is
+ * not there, and a command line the shell split at a quoted argument. cmd.exe prints
+ * the name it could not run in single quotes either way, so the name itself decides:
+ * a token that could not be a program (it carries a shell character) is a fragment of
+ * a split line, and `'0$''` on 28 Nov was exactly that — a correct check reported as
+ * a missing program.
  */
 export function checkInfrastructureFailure(result) {
   if (!result || result.ok !== false || result.skipped || result.aborted) return '';
   const text = String(result.output || '');
   if (/could not (?:start|run) the check/i.test(text)) return 'the check process could not start';
+  const unknown =
+    /(?:^|[\r\n])\s*'([^'\r\n]*)'[^\r\n]*?is not recognized as an internal or external command/i.exec(text);
+  if (unknown) {
+    if (/[^\w.\-:\\/]/.test(unknown[1])) {
+      return (
+        'the shell split the command line at a quoted argument — a check that uses a shell ' +
+        'operator (|, &&, >) is run by cmd.exe, so quote its arguments with double quotes'
+      );
+    }
+    return 'a command the check names is not available to the harness';
+  }
   if (
-    /is not recognized as the name of a cmdlet|is not recognized as an internal or external command|CommandNotFoundException|\bcommand not found\b|^\S[^\r\n]*: not found\b/im.test(
+    /is not recognized as the name of a cmdlet|CommandNotFoundException|\bcommand not found\b|^\S[^\r\n]*: not found\b/im.test(
       text,
     )
   ) {

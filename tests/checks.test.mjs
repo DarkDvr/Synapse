@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { parseChecks, runCheck, runTaskChecks, checkDecision, checkInfrastructureFailure, CHECK_MAX } from '../src/checks.js';
+import { parseChecks, runCheck, runTaskChecks, checkDecision, checkInfrastructureFailure, splitCommand, hasShellSyntax, CHECK_MAX } from '../src/checks.js';
 import { createRunner } from '../src/runs.js';
 import { tmpdir } from './tmpdir.mjs';
 
@@ -86,6 +86,68 @@ test('a check that never returns is stopped at the timeout, not left running', a
   const result = await runCheck('node -e "setTimeout(() => {}, 10000)"', { cwd: dir, timeoutMs: 400 });
   assert.equal(result.timedOut, true);
   assert.equal(result.code, 124);
+});
+
+// 28 Nov: the harness ran t2's check through cmd.exe, which split `'#result|^0$'`
+// at the pipe and executed the tail as a program — the check the worker had just run
+// successfully. A command without shell syntax is now spawned as the program and the
+// arguments it names, so quoting is ours.
+test('a command line is split on quotes, and keeps a path’s backslashes', () => {
+  assert.deepEqual(splitCommand("node shot.mjs --expect '#result|^0$' --audit"), [
+    'node',
+    'shot.mjs',
+    '--expect',
+    '#result|^0$',
+    '--audit',
+  ]);
+  assert.deepEqual(splitCommand('node -e "console.log(1)"'), ['node', '-e', 'console.log(1)']);
+  assert.deepEqual(splitCommand(`node -e 'console.log("x")'`), ['node', '-e', 'console.log("x")']);
+  assert.deepEqual(splitCommand('node C:\\dev\\x.js'), ['node', 'C:\\dev\\x.js'], 'a backslash is not an escape');
+  assert.deepEqual(splitCommand('node -e "say \\"hi\\""'), ['node', '-e', 'say "hi"']);
+  assert.deepEqual(splitCommand('node ""'), ['node', ''], 'an empty argument survives');
+  assert.equal(splitCommand("node 'unclosed"), null, 'an unclosed quote is not guessed at');
+});
+
+test('only a real shell operator keeps cmd.exe in charge', () => {
+  assert.equal(hasShellSyntax("node --expect '#a|b'"), false, 'a pipe inside quotes is an argument');
+  assert.equal(hasShellSyntax('node a.mjs && node b.mjs'), true);
+  assert.equal(hasShellSyntax('node a.mjs > out.txt'), true);
+  assert.equal(hasShellSyntax('node a.mjs | more'), true);
+  assert.equal(hasShellSyntax('echo %TEMP%'), true, 'a variable is the shell’s');
+});
+
+test('a pipe or a semicolon inside a quoted check argument reaches the program', async () => {
+  const dir = path.join(ROOT, 'quoted');
+  fs.mkdirSync(dir, { recursive: true });
+  const script = path.join(dir, 'echo-args.mjs');
+  fs.writeFileSync(script, 'console.log(JSON.stringify(process.argv.slice(2)));\n');
+  const result = await runCheck(`node "${script}" '#result|^0$' 'a;b'`, { cwd: dir });
+  assert.equal(result.ok, true, result.output);
+  assert.deepEqual(JSON.parse(result.output.trim()), ['#result|^0$', 'a;b']);
+});
+
+test('a .cmd the project made is still run, through the shell, because only a shell can start it', async () => {
+  const dir = path.join(ROOT, 'cmd-fallback');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'hello.cmd'), '@echo off\r\necho hello-from-cmd\r\n');
+  const result = await runCheck('hello.cmd', { cwd: dir });
+  assert.equal(result.ok, true, result.output);
+  assert.match(result.output, /hello-from-cmd/);
+});
+
+test('a command line the shell split is named as that, not as a missing program', () => {
+  const split = checkInfrastructureFailure({
+    ok: false,
+    code: 255,
+    output: "'0$'' is not recognized as an internal or external command,",
+  });
+  assert.match(split, /split the command line/);
+  assert.doesNotMatch(split, /not available to the harness/);
+  assert.match(
+    checkInfrastructureFailure({ ok: false, code: 255, output: "'definitely-not-a-command' is not recognized as an internal or external command," }),
+    /not available to the harness/,
+    'a name that could be a program is still a missing program',
+  );
 });
 
 test('runTaskChecks stops at the first failure and keeps the log inside the project', async () => {

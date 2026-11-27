@@ -1138,6 +1138,13 @@ the harness runs them in the project when the worker says it is done.
 - **Same policy as a shell call.** Each command goes through `decide()` before it runs. A check that would
   ask or is refused is reported as *not run*, with the reason — never silently passed, because a skipped
   check that reads as a pass is worse than no check.
+- **How the line is run.** A command with no shell syntax (`|`, `&`, `>`, `<`, `%VAR%`) is split into the
+  program and its arguments here and spawned **without** a shell, so a quoted argument arrives exactly as
+  written — `--expect '#result|^0$'` is one argument, not a pipe. A line that does use the shell keeps
+  cmd.exe, where single quotes are not quotes; a command only a shell can start (`npm`, which is
+  `npm.cmd`, or a `.cmd` in the project) is retried through one. 28 Nov: t2's check was handed to cmd.exe,
+  which read the `|` as a pipe and ran `^0$' --audit` as a program, 36 ms and exit 255 — a check the worker
+  had just run successfully.
 - **One repair turn.** A failure sends the command, its exit code and the tail of its output back to the
   same worker. A second failure stops there: the report head says *finished, but its check fails*, the
   worker's own words follow, and the Architect judges. The harness never marks the row.
@@ -1145,7 +1152,9 @@ the harness runs them in the project when the worker says it is done.
   recognized ...`, `command not found`, exit 127/9009) is marked invalid: the report says *finished, but
   its check could not run* and tells the Architect to replace it. The worker is not nudged — it cannot
   install a command into the harness's shell, and asking it to try is what sent t2a into protected Windows
-  folders on 17 Nov.
+  folders on 17 Nov. A name cmd could not run is judged by its shape: a token that could not be a program
+  (`'0$''`) is a line the shell split, and the report says that instead of naming a program that was never
+  missing.
 - **Why one, not a loop.** A check that fails twice is a task the worker cannot finish or a check that is
   wrong; retrying the same turn finds neither. QC still judges the work.
 - **Bounded and local.** At most three commands, 300 characters and two minutes each. Output is capped;
