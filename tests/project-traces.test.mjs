@@ -39,6 +39,9 @@ function store({ projectDir = DIR, otherDir = 'F:\\dev\\Synapse.Projects\\kept' 
   const brief = (dirPath) => JSON.stringify({ text: `Synapse project: ${dirPath}\\nScratch folder: ${dirPath}\\.project\\scratch` });
   db.prepare('insert into instruction_blob values (?, ?)').run('h1', brief(projectDir.replace(/\\/g, '\\\\')));
   db.prepare('insert into instruction_blob values (?, ?)').run('h2', brief(otherDir.replace(/\\/g, '\\\\')));
+  // A live project whose name starts with the deleted one: a prefix match would
+  // take its brief too, and its session then failed with "Instruction blob not found".
+  db.prepare('insert into instruction_blob values (?, ?)').run('h3', brief(`${projectDir}2`.replace(/\\/g, '\\\\')));
   db.close();
   for (const id of [ID, OTHER]) {
     const shells = path.join(opencode, 'shell', id);
@@ -86,6 +89,11 @@ test('purging removes the row, its worktrees and its shell output — and nothin
   const blobs = new DatabaseSync(path.join(opencode, 'opencode.db'));
   assert.equal(blobs.prepare('select count(*) c from instruction_blob where hash = ?').get('h1').c, 0);
   assert.equal(blobs.prepare('select count(*) c from instruction_blob where hash = ?').get('h2').c, 1);
+  assert.equal(
+    blobs.prepare('select count(*) c from instruction_blob where hash = ?').get('h3').c,
+    1,
+    'a live project whose name starts with the deleted one keeps its brief',
+  );
   blobs.close();
 });
 

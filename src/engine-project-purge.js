@@ -87,13 +87,17 @@ export async function purgeProjectTraces({ dataDir, dir, log = null } = {}) {
       const base = path.basename(String(dir));
       if (base) {
         const folder = String(dir).replace(/\\+/g, '\\').replace(/\\/g, '/').toLowerCase();
+        // Match the whole folder, not a prefix: deleting `delegate-local` must not
+        // take the blobs of a live `delegate-local2` or `delegate-local-oldmodel`.
+        // The character after the path has to be a separator, a quote or whitespace.
+        const atPath = new RegExp(`${folder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[/"'\\s])`);
         const rows = db
           .prepare('select hash, value from instruction_blob where value like ?')
           .all(`%${base}%`);
         const drop = db.prepare('delete from instruction_blob where hash = ?');
         for (const row of rows) {
           const flat = String(row.value).replace(/\\+/g, '\\').replace(/\\/g, '/').toLowerCase();
-          if (flat.includes(folder)) {
+          if (atPath.test(flat)) {
             drop.run(row.hash);
             result.briefs += 1;
           }
