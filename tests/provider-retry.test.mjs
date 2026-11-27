@@ -46,7 +46,7 @@ function project(name) {
 /** A turn-by-turn stub. `script` is consumed one entry per turn; the last entry
  *  repeats. `{ silent: true }` starts a turn that never closes — the shape of a
  *  session the engine has silently lost. */
-function makeEngine({ dir, script, wakeScript, hangWakeRead = false }) {
+function makeEngine({ dir, script, wakeScript, hangWakeRead = false, hangWakeSession = false }) {
   const sessions = new Map();
   const woke = [];
   const descriptions = [];
@@ -56,6 +56,7 @@ function makeEngine({ dir, script, wakeScript, hangWakeRead = false }) {
   const prompts = [];
   let seq = 0;
   let hungWakeRead = false;
+  let archSessionReads = 0;
 
   const startTurn = (id) => {
     const s = sessions.get(id);
@@ -81,7 +82,12 @@ function makeEngine({ dir, script, wakeScript, hangWakeRead = false }) {
 
   const engine = {
     async getSession(id) {
-      if (id === 'ses_arch') return { id, directory: dir, internal: false, single: false, auto: false };
+      if (id === 'ses_arch') {
+        // The report path reads this for the automation switches after the run.
+        // A read that never answers must not keep the report from the Architect.
+        if (hangWakeSession && ++archSessionReads >= 3) return new Promise(() => {});
+        return { id, directory: dir, internal: false, single: false, auto: false };
+      }
       const s = sessions.get(id);
       return { id, directory: dir, internal: true, role: s?.role };
     },
@@ -131,10 +137,10 @@ function makeEngine({ dir, script, wakeScript, hangWakeRead = false }) {
   return { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts };
 }
 
-async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, stopWakeAfter = 0, untilWoke = 1, harnessStopAfter = 0, harnessReason = '', delegates = 1, hangWakeRead = false }) {
+async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, stopWakeAfter = 0, untilWoke = 1, harnessStopAfter = 0, harnessReason = '', delegates = 1, hangWakeRead = false, hangWakeSession = false }) {
   const dir = project(name);
   const runsFile = path.join(dir, '.project', 'runs.jsonl');
-  const { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts } = makeEngine({ dir, script, wakeScript, hangWakeRead });
+  const { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts } = makeEngine({ dir, script, wakeScript, hangWakeRead, hangWakeSession });
   const events = [];
   const noted = [];
   const logged = [];
@@ -382,6 +388,15 @@ expect(
   'wake: a transcript read that never answers does not swallow the report',
   hungRead.woke.length === 1,
   `woke=${hungRead.woke.length}`,
+);
+
+// 6a2. The automation read after the result is the other blocker before the
+// report. It gets the same deadline, then the default switches are used.
+const hungSession = await runCase({ name: 'hung-wake-session', script: [{}], hangWakeSession: true });
+expect(
+  'wake: a session read that never answers does not swallow the report',
+  hungSession.woke.length === 1,
+  `woke=${hungSession.woke.length}`,
 );
 
 // 6b. Stop on the Architect ends the wake loop: no retry, no second synthetic.

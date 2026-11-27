@@ -2893,10 +2893,14 @@ export function createRunner({ engine, logger, getConfig, guard, notify, modelCa
     }
 
     // The "keep building" switch is read at report time, so flipping it while a
-    // worker runs takes effect on the very next judgement.
+    // worker runs takes effect on the very next judgement. This read is an
+    // optimisation, not the report: a stuck engine request here used to hold the
+    // wake as well, which is the same silent shape as the transcript read above.
     let automation = { ...AUTOMATION_DEFAULTS };
     try {
-      automation = readAutomation(await engine.getSession(architectId));
+      const session = await within(10_000, engine.getSession(architectId), null);
+      if (session) automation = readAutomation(session);
+      else out.warn(`run ${request.task}: the Architect's session did not answer in 10s; using the default automation`);
     } catch { /* session gone; treat every switch as off */ }
     const auto = automation.keepBuilding;
     // The pause between a worker's report and the Architect being told to carry
