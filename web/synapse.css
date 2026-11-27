@@ -1200,6 +1200,21 @@ body[data-view="session"] .chat-dock:not(.has-history) .composer { border-top-co
 /* The chat's top-right corner is one row: the compact chip, then the jump
    buttons. The row is right-anchored at 112px (the operator's distance from the
    window corner), so the FABs keep the same place and the chip grows leftward. */
+/* The transcript is loaded a page at a time. This is the only way to ask for the
+   page before the oldest one, so it sits at the conversation's top, not in the
+   floating tools where it would compete with Compact. */
+.load-earlier { display: flex; justify-content: center; padding: 2px 0 10px; }
+.load-earlier-btn {
+  padding: 3px 10px; border: 1px solid #353941; border-radius: 999px;
+  background: transparent; color: #8b8f97;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+  text-transform: uppercase; cursor: pointer;
+}
+.load-earlier-btn:hover, .load-earlier-btn:focus-visible {
+  color: var(--yellow); border-color: rgba(237, 194, 90, 0.62);
+  background: rgba(237, 194, 90, 0.06); outline: none;
+}
+
 .chat-tools {
   position: absolute; top: 7px; right: 112px;
   display: flex; align-items: center; gap: 8px;

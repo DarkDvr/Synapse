@@ -2608,15 +2608,25 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       return { ok: true };
     },
 
-    messages: async (sessionId) => {
+    messages: async (sessionId, { cursor = '' } = {}) => {
       requireReady();
-      const messages = await engine.getMessages(sessionId);
-      // The page uses this to decide whether the quiet Remove chip belongs on the
-      // chat tools. The server still checks again before it deletes anything; this
-      // is a preview, not a permission.
+      // Older pages come from the engine's opaque cursor. The newest page is still
+      // the one that decides Remove Exchange; an older page has no "last" message.
+      const page = typeof engine.getMessagesPage === 'function'
+        ? await engine.getMessagesPage(sessionId, cursor ? { cursor } : {})
+        : { messages: await engine.getMessages(sessionId), cursor: null };
+      const messages = Array.isArray(page.messages) ? page.messages : [];
+      if (cursor) {
+        return {
+          messages,
+          cursor: page.cursor || null,
+          remove: { available: false, reason: 'older page' },
+        };
+      }
       const remove = lastExchange(messages);
       return {
         messages,
+        cursor: page.cursor || null,
         remove: remove.ok
           ? { available: true, count: remove.count, messageID: remove.messageID }
           : { available: false, reason: remove.reason },

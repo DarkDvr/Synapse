@@ -398,7 +398,7 @@ export function renderTranscript() {
   const sig = hasHistory
     ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${messageSig(m)}`).join(',')}|${pending.length}|${modeNote ? state.modeNote?.at || 1 : 0}|${waitPost ? 1 : 0}|${state.streaming}|${traceSig()}|${alarmsHere().length}|${state.decisionSeq}|${state.downloadSeq}|${
         compactPost ? `${compactPost.at}:${compactPost.summary.length}` : ''
-      }`
+      }|${state.earlierCursor ? 1 : 0}`
     : '';
   if (sig && sig === state.renderSig) {
     renderChatNav();
@@ -495,6 +495,11 @@ export function renderTranscript() {
     .filter((lease) => !liveRuns.has(String(lease.task || '')))
     .map(renderLease)
     .join('');
+  // The engine gives the newest page and an opaque cursor for the page before it.
+  // The button is part of the conversation, at its top, only when there is more.
+  const earlier = hasHistory && state.earlierCursor
+    ? '<div class="load-earlier"><button type="button" class="load-earlier-btn" data-load-earlier>Load Earlier</button></div>'
+    : '';
   // What is on screen now, read before the draw replaces it: a row whose name is not
   // in here is a row that just arrived ("a line that arrives", above).
   const seenRows = [];
@@ -505,7 +510,7 @@ export function renderTranscript() {
   const chat = String(currentProject()?.directory || '');
   const firstDraw = chat !== drawnFor;
   drawnFor = chat;
-  el.innerHTML = html + modeNote + waitPost + pending;
+  el.innerHTML = earlier + html + modeNote + waitPost + pending;
   arrive(el, seenRows, firstDraw);
   // The live panel's slide is a transform on a node this rebuild just replaced, so
   // the offset has to be put back or the text snaps to its first line.

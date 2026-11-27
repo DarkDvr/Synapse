@@ -809,15 +809,28 @@ export class OpenCodeEngine extends Engine {
    * compactions in hand); the oldest messages of a very long turn can fall off,
    * which the census and the trace both tolerate.
    */
-  async getMessages(sessionId) {
+  async getMessagesPage(sessionId, { limit = 200, order = 'desc', cursor = '' } = {}) {
+    const query = [`limit=${encodeURIComponent(String(limit))}`];
+    if (cursor) query.push(`cursor=${encodeURIComponent(cursor)}`);
+    else query.push(`order=${encodeURIComponent(order)}`);
     const r = await this.request(
       'GET',
-      `/api/session/${encodeURIComponent(sessionId)}/message?limit=200&order=desc`,
+      `/api/session/${encodeURIComponent(sessionId)}/message?${query.join('&')}`,
     );
     const data = Array.isArray(r?.data) ? r.data : [];
     const messages = data.map(normalizeMessage);
     messages.sort((a, b) => (a.created || 0) - (b.created || 0));
-    return messages;
+    return {
+      messages,
+      cursor: {
+        previous: r?.cursor?.previous ?? null,
+        next: r?.cursor?.next ?? null,
+      },
+    };
+  }
+
+  async getMessages(sessionId) {
+    return (await this.getMessagesPage(sessionId)).messages;
   }
 
   /**

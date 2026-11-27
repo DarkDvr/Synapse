@@ -32,6 +32,8 @@ transcriptWiring({
 const reset = (messages = []) => {
   const page = installPage();
   state.messages = messages;
+  state.earlierCursor = null;
+  state.loadedEarlier = false;
   state.sessionId = 'ses_test';
   state.sessionTrace = { key: '', stream: null };
   state.traces = new Map();
@@ -97,6 +99,22 @@ test('a worker trace renders its steer, its permission and one older-entries fol
   assert.match(html, /is-steer is-pending/, 'the pending steer is not marked');
   assert.match(html, /class="tool-perm state-pill err"/, 'the refused permission has no chip');
   assert.match(html, /outside the project/, 'the refusal reason is not in the tooltip');
+});
+
+test('Load Earlier appears only when the engine has an older page', () => {
+  const page = reset([
+    { id: 'm1', type: 'user', text: 'Build it', created: 1 },
+    { id: 'm2', type: 'assistant', completed: true, created: 2, parts: [{ type: 'text', text: 'Done.' }] },
+  ]);
+  renderTranscript();
+  assert.doesNotMatch(page.innerHTML, /data-load-earlier/);
+  state.earlierCursor = 'page-before';
+  renderTranscript();
+  assert.match(page.innerHTML, /data-load-earlier/);
+  assert.match(page.innerHTML, />Load Earlier</);
+  state.earlierCursor = null;
+  renderTranscript();
+  assert.doesNotMatch(page.innerHTML, /data-load-earlier/);
 });
 
 test('a message renders its own text even when a picture is attached', () => {

@@ -885,6 +885,8 @@ async function openSession(id, { keepDraft = false } = {}) {
   // cache and timer on its Architect card (21 Nov).
   state.messages = [];
   state.archCtx = null;
+  state.earlierCursor = null;
+  state.loadedEarlier = false;
   state.removeInfo = null;
   state.lease = null;
   resetRemoveExchange();
@@ -1153,6 +1155,8 @@ function showNothing() {
   state.view = 'none';
   state.sessionId = null;
   state.messages = [];
+  state.earlierCursor = null;
+  state.loadedEarlier = false;
   state.removeInfo = null;
   resetRemoveExchange();
   state.planState = null;
@@ -1230,6 +1234,7 @@ function lastCompletedAt(messages = []) {
  * report" they reported twice).
  */
 let messagesAsked = 0;
+let earlierBusy = false;
 
 async function loadMessages() {
   // The chat this request is for. It can be replaced while the request is in
@@ -1246,7 +1251,24 @@ async function loadMessages() {
     const answer = await api('GET', `/api/sessions/${encodeURIComponent(id)}/messages`);
     if (!current()) return;
     const loaded = answer.messages;
+    const loadedIds = new Set(loaded.map((m) => String(m?.id || '')).filter(Boolean));
+    // Once the operator has asked for older messages, a poll must not throw them
+    // away. Only messages strictly older than this newest page are kept: that
+    // leaves a removed latest exchange out of the merge.
+    const firstLoadedAt = Number(loaded[0]?.created) || 0;
+    const earlier = state.loadedEarlier && firstLoadedAt
+      ? (state.messages || []).filter(
+          (m) =>
+            m?.id &&
+            !loadedIds.has(String(m.id)) &&
+            !String(m.id).startsWith('local-') &&
+            Number(m.created) < firstLoadedAt,
+        )
+      : [];
     state.removeInfo = answer.remove || null;
+    // The button is only meaningful while there is a page before the oldest one.
+    // A poll does not move that cursor once earlier pages are loaded.
+    if (!state.loadedEarlier) state.earlierCursor = answer.cursor?.previous || null;
     // A steer this page painted the moment it was sent is not in the engine's
     // transcript until the model has read it. Dropping it here made the operator's
     // own sentence vanish for minutes - the "no confirmation" they reported
@@ -1275,6 +1297,7 @@ async function loadMessages() {
     const beforeLive = live.filter((m) => !m.afterSteer);
     const afterLive = live.filter((m) => m.afterSteer);
     state.messages = [
+      ...earlier,
       ...loaded,
       ...beforeLive,
       ...keptPending,
@@ -1332,6 +1355,42 @@ async function loadMessages() {
   // The plan is a file the Architect writes during the turn, so a message
   // refresh is exactly when it is most likely to have changed.
   loadPlan();
+}
+
+/**
+ * Load the page before the oldest message already on screen.
+ *
+ * The chat stays where it is: after the prepend, the scroller is moved by exactly
+ * the height that was added, so the sentence the operator was reading does not
+ * jump. The newest page is still the poll's; `loadedEarlier` is what tells the
+ * next poll to merge rather than replace it.
+ */
+async function loadEarlier() {
+  const id = state.sessionId;
+  const cursor = state.earlierCursor;
+  if (!id || !cursor || earlierBusy) return;
+  earlierBusy = true;
+  const scroller = chatScroller();
+  const fromHeight = scroller?.scrollHeight || 0;
+  const fromTop = scroller?.scrollTop || 0;
+  try {
+    const page = await api(
+      'GET',
+      `/api/sessions/${encodeURIComponent(id)}/messages?cursor=${encodeURIComponent(cursor)}`,
+    );
+    if (state.sessionId !== id) return;
+    const known = new Set((state.messages || []).map((m) => String(m?.id || '')).filter(Boolean));
+    const older = (page.messages || []).filter((m) => m?.id && !known.has(String(m.id)));
+    state.messages = [...older, ...(state.messages || [])];
+    state.earlierCursor = page.cursor?.previous || null;
+    state.loadedEarlier = true;
+    renderTranscript();
+    if (scroller) scroller.scrollTop = fromTop + (scroller.scrollHeight - fromHeight);
+  } catch (err) {
+    toast('Could Not Load Earlier Messages', err.message);
+  } finally {
+    earlierBusy = false;
+  }
 }
 
 function updateBusyFromMessages() {
@@ -2396,6 +2455,11 @@ document.addEventListener('keydown', (e) => {
     else scrollChatToBottom();
   });
   $('transcript').addEventListener('click', async (e) => {
+    const earlier = e.target.closest?.('[data-load-earlier]');
+    if (earlier) {
+      loadEarlier();
+      return;
+    }
     const remove = e.target.closest?.('[data-remove-msg]');
     if (remove) {
       removeExchangeClick();

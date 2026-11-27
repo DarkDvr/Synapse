@@ -26,6 +26,11 @@ export const state = {
   projects: [],
   sessionId: null,
   messages: [],
+  // The cursor for the page before the oldest loaded message. `loadedEarlier`
+  // says the transcript now holds more than the newest page, so a poll must merge
+  // rather than replace it.
+  earlierCursor: null,
+  loadedEarlier: false,
   // Whether the server would allow removing the last exchange, and where its
   // boundary is. It arrives with the transcript; the server checks again when the
   // operator confirms.

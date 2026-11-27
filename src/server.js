@@ -623,7 +623,10 @@ export function createServer({ api, engine, logger, config, remote, onRemote }) 
       }
       const sessionId = decodeURIComponent(seg[1] || '');
       if (seg[2] === 'model' && method === 'POST') return sendJson(res, 200, await api.switchModel(sessionId, await readBody(req)));
-      if (seg[2] === 'messages' && method === 'GET') return sendJson(res, 200, await api.messages(sessionId));
+      if (seg[2] === 'messages' && method === 'GET') {
+        const cursor = new URL(req.url, 'http://localhost').searchParams.get('cursor') || '';
+        return sendJson(res, 200, await api.messages(sessionId, { cursor }));
+      }
       if (seg[2] === 'plan' && method === 'GET') return sendJson(res, 200, await api.plan(sessionId));
       if (seg[2] === 'auto' && method === 'POST') return sendJson(res, 200, await api.setAuto(sessionId, await readBody(req)));
       // The four automation switches: Keep Building, Auto-Permissions,
