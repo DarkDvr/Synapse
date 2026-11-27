@@ -1777,16 +1777,20 @@ function connectStream() {
       return;
     }
 
-    // A conversation was compacted: its chat is gone and a fresh one exists. The
-    // window that was looking at the old one follows without a reload; every
-    // other window just refreshes the rail (the old session has left it).
+    // A conversation was compacted. Modern compactions happen in place: the chat,
+    // its folds and its alarms stay, and the transcript just gains a card. Older
+    // events (from a session replacement) still follow the replacement path.
     if (ev.kind === 'project' && ev.type === 'project.compacted') {
-      // The discarded chat's folds and alarms go with it, before the new chat is
-      // opened: a compact leaves one post, not a list of the old runs.
+      const inPlace = ev.inPlace === true || ev.sessionId === ev.oldSessionId;
+      if (inPlace) {
+        if (ev.sessionId === state.sessionId) loadMessages();
+        else reloadProjects();
+        return;
+      }
+      // Legacy: a discarded chat was replaced by a fresh one. Its folds and alarms
+      // go with it, before the new chat is opened.
       forgetConversation(ev.directory || currentProject()?.directory || '', ev.oldSessionId);
       if (ev.oldSessionId === state.sessionId) {
-        // The old chat is gone because its replacement exists: keep the view open
-        // while the list catches up, then follow the new chat.
         loadProjects({ keepOpen: true })
           .then(() => {
             if (state.sessionId === ev.oldSessionId) return openSession(ev.sessionId);
@@ -3107,7 +3111,7 @@ async function bootPage() {
   modelPickerWiring({ fillRoleModels, modelLabel, modelMeta, modelTitle, issuesTitle });
   // The compact chip opens the new chat; the role cards ask for their labels, the
   // settings dialog and the cards' activity.
-  compactWiring({ openSession });
+  compactWiring({ loadMessages });
   removeExchangeWiring({ loadMessages });
   roleModelsWiring({ modelLabel, modelTitle, openDialog, renderRoleActivity });
   // The project menu asks for the dialog, opening a chat, the empty view and the slug.

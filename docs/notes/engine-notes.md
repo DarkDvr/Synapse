@@ -433,22 +433,22 @@ quote the first 1,600 characters of the *original* request, so a long project op
 first day. The head is rebuilt from the Log on every write; Single messages are `### chat` and never
 become the head's request.
 
-**Compacting a conversation is the one reset.** `POST /api/session/{id}/compact` is queued at the next
-step boundary and does **not** delete the transcript: the engine's summary replaces what the model is
-sent. The order matters:
+**Compacting a conversation keeps it.** `POST /api/session/{id}/compact` is queued at the next step
+boundary and does **not** delete the transcript: the engine's summary replaces what the model is sent.
+Manual compact now follows the same path as the engine's automatic one:
 
 1. `engine.compact(session)`; wait for a **new** `compaction` message with `status: completed` and a
    `summary` (shaped Objective / Requirements / Decisions / Work State).
 2. Write the summary into `project.md`'s `## Handover`, and a `### compact` line into the Log. **Nothing
-   is deleted before this succeeds.**
-3. Create a new session in the same folder with the project's mode, Keep Building, model and the "Always
-   Allow" grants; its metadata carries `synapse.compacted {at, summary, messages}`.
-4. Delete the old session and broadcast `project.compacted`.
+   is written before this succeeds.**
+3. Keep the same session and reload its transcript; the compaction card is the only new row. Broadcast
+   `project.compacted` with `inPlace: true`.
 
-A refusal or a timeout leaves the conversation exactly as it was: there is no silent discard. **A failed
-compaction is not waited out, and Stop cancels the wait (29 Oct)**: the engine writes `status: 'failed'`
-when it gives up, so `waitForHandover` returns an error at once instead of polling three minutes; Stop
-marks the wait cancelled (`cancelCompact`) and the request rejects with 409.
+There is no replacement session and no `synapse.compacted` post. A refusal or a timeout leaves the
+conversation exactly as it was: there is no silent discard. **A failed compaction is not waited out, and
+Stop cancels the wait (29 Oct)**: the engine writes `status: 'failed'` when it gives up, so
+`waitForHandover` returns an error at once instead of polling three minutes; Stop marks the wait cancelled
+(`cancelCompact`) and the request rejects with 409.
 
 **A worker's transcript is replaced when its compaction no longer fits (28 Oct).** The compactor reads
 the whole *retained* transcript, so a long task asks the model to summarise more than its window holds —

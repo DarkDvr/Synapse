@@ -10,7 +10,7 @@ import { commitLabel, commitVcs, ensureVcs } from './project-vcs.js';
 import { createFormAuto } from './form-auto.js';
 import { setHold as holdTimers, clearHold as releaseTimers, isHeld } from './hold.js';
 import { answerTimeoutMs, formPages } from './auto-answer.js';
-import { AUTOMATION_DEFAULTS, AUTOMATION_KEYS, cleanAutomation, nextSynapse, readAutomation, mayEnableAutoShutdown } from './automation.js';
+import { AUTOMATION_DEFAULTS, AUTOMATION_KEYS, cleanAutomation, nextSynapse, mayEnableAutoShutdown } from './automation.js';
 import { keepAttachments } from './keep-attachments.js';
 import { skillRules, describeSkills } from './skills.js';
 import { lastExchange } from './session-remove.js';
@@ -3051,19 +3051,19 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
     },
 
     /**
-     * Compact: the engine writes a handover, the conversation is discarded, a
-     * fresh one starts in the same folder.
+     * Compact in place: the engine writes a handover and condenses the model's
+     * context, while the chat keeps its history.
      *
-     * This is the only reset. It is refused while anything is running (a chapter
-     * cannot close mid-turn) and while another compact on the same chat is in
-     * flight. Nothing is deleted until the handover is safely in the project
-     * document: a compaction that fails leaves the conversation exactly as it was.
+     * This is the manual form of what the engine already does automatically. It is
+     * refused while anything is running (a chapter cannot close mid-turn) and while
+     * another compact on the same chat is in flight. Nothing is written to the
+     * project document unless the engine produced a handover: a failed compaction
+     * leaves everything exactly as it was.
      *
-     * The new session keeps what belongs to the project rather than the chat —
-     * folder, mode, Keep Building, model — and carries the "Always Allow" grants,
-     * because compaction is about context, not consent. Its metadata carries the
-     * post the chat shows (`synapse.compacted`), and the project document's
-     * `## Handover` carries the brief.
+     * There is no replacement session. The conversation, its session metadata, its
+     * permissions and the operator's scroll position stay; the compaction appears
+     * as one more card in the transcript. The project document's `## Handover`
+     * carries the durable summary.
      */
     compactSession: async (sessionId, { timeoutMs = 180000 } = {}) => {
       requireReady();
@@ -3113,65 +3113,26 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         const marker = appendEntry(
           session.directory,
           'compact',
-          `The conversation was discarded after ${handover.messages} messages; the handover is in this document.`,
+          `The conversation was compacted in place after ${handover.messages} messages; the handover is in this document.`,
           { at },
         );
         if (marker && marker.ok === false) app.warn(`could not mark the compact in the project document: ${marker.error}`);
-
-        const meta = session.metadata && typeof session.metadata === 'object' ? { ...session.metadata } : {};
-        const synapse = { ...(meta.synapse && typeof meta.synapse === 'object' ? meta.synapse : {}) };
-        // The new conversation keeps the four switches (and the legacy mirrors
-        // `nextSynapse` writes), or a compaction would quietly reset the project's
-        // automation.
-        Object.assign(synapse, nextSynapse(synapse, readAutomation(session)));
-        synapse.compacted = { at, summary: handover.text, messages: handover.messages };
-        if (compactCancels.has(sessionId)) throw cancelled();
-        const created = await engine.createSession({
-          title: path.basename(session.directory) || 'chat',
-          model: session.model ? { ref: session.model, variant: session.variant || undefined } : undefined,
-          directory: session.directory,
-          permissions: session.single ? SINGLE_RULES : [],
-          metadata: { ...meta, synapse },
-        });
-        if (!created?.id) {
-          throw fail(502, 'the engine did not return a new conversation; nothing was deleted');
-        }
-        if (compactCancels.has(sessionId)) {
-          // Stop landed while the replacement was being made: remove the orphan
-          // and leave the conversation the operator still has open untouched.
-          try { await engine.deleteSession(created.id); } catch { /* left for the sweep */ }
-          throw cancelled();
-        }
-        try {
-          permissionMemory?.carry?.(sessionId, created.id);
-        } catch (err) {
-          app.warn(`the Always Allow grants could not be carried to the new conversation: ${err.message}`);
-        }
-        try {
-          await engine.deleteSession(sessionId);
-        } catch (err) {
-          // The new chat is live and the old one is now an orphan; the app shows
-          // the new one, and the failure is in the log for a later sweep.
-          app.warn(`the old conversation could not be deleted after a compact: ${err.message}`);
-        }
-        briefed.delete(sessionId);
-        await brief(created.id, session.directory, 'architect', session?.automation?.keepBuilding === true, {
-          single: session.single === true,
-        });
         app.info(
-          `compacted ${sessionId} -> ${created.id}: ${handover.messages} messages, handover ${handover.text.length} chars`,
+          `compacted ${sessionId} in place: ${handover.messages} messages, handover ${handover.text.length} chars`,
         );
         notify?.({
           kind: 'project',
           type: 'project.compacted',
+          inPlace: true,
           oldSessionId: sessionId,
-          sessionId: created.id,
+          sessionId,
           directory: session.directory,
           at,
         });
         return {
           ok: true,
-          sessionId: created.id,
+          inPlace: true,
+          sessionId,
           oldSessionId: sessionId,
           at,
           messages: handover.messages,

@@ -1,9 +1,6 @@
-// A compact replaces the chat; it does not replace the operator's unsent words.
-//
-// OpenSession clears the draft and attachments on a normal chat switch, because a
-// draft belongs to the chat it was typed in (21 Nov). A compact's replacement is
-// the same conversation, so clearing them there made the operator retype the
-// message and re-attach the files after every handover (25 Nov).
+// A compact condenses the context; it does not replace the chat or the operator's
+// unsent words. The transcript is reloaded in place, so the draft and attachments
+// never leave the composer.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -11,9 +8,11 @@ import path from 'node:path';
 
 const read = (rel) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8');
 
-test('a compact opens the replacement with the draft and attachments kept', () => {
+test('a compact keeps the same chat and reloads its transcript', () => {
   const compact = read('web/compact.js');
-  assert.match(compact, /openSession\(out\.sessionId, \{ keepDraft: true \}\)/, 'the compact opens its replacement as an ordinary switch');
+  assert.match(compact, /wired\.loadMessages\(\)/, 'the compact reloads the same chat');
+  assert.doesNotMatch(compact, /state\.messages\s*=\s*\[\]/, 'the compact clears the transcript');
+  assert.doesNotMatch(compact, /openSession\(/, 'the compact opens a replacement chat');
 });
 
 test('an ordinary chat switch still starts with an empty box', () => {

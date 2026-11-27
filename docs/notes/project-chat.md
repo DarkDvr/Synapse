@@ -1,8 +1,9 @@
 # One chat per project — the scope
 
 A project is one conversation. No session list, no General, no choice between "new"
-and "continue". The only reset is **Compact**, which throws the conversation away and
-leaves a handover behind. All five phases were built on 27 Oct.
+and "continue". **Compact** condenses the model's context in place, writes a handover
+and leaves the conversation on screen. All five phases were built on 27 Oct; manual
+compaction became in-place on 27 Nov.
 
 ## The end state
 
@@ -12,29 +13,29 @@ leaves a handover behind. All five phases were built on 27 Oct.
 - No New Session, no session titles, no rename-a-session, no General section.
 - The chat has a compact chip in its top-left, floating like the scroll buttons and
   hidden whenever a compaction cannot run. Two clicks: the second, within 3 seconds,
-  on a red pill that names what is lost and what stays.
-- Compact: the engine writes a summary, Synapse keeps it in the project document, the
-  conversation is deleted, a new one starts, and the chat shows a "Compacted …" post
-  with the handover behind it.
+  asks to compact the context; the chat stays.
+- Compact: the engine writes a summary, Synapse keeps it in the project document, and
+  the same chat gains one tool-card row at the point of compaction. No session is
+  replaced.
 - On first run: no projects, and a landing state that says to make one.
 
 ## Decided
 
-1. **One project, one chat.** The engine still has one session per chat, and compact
-   replaces it — that is invisible and is not a "chapter".
+1. **One project, one chat.** The engine still has one session per chat; compact
+   condenses that session instead of replacing it.
 2. **General is removed.** No default project, no auto-created project, no
    undeletable project.
-3. **No chat history, no dump.** Erased means erased. The record is the files: the
-   project document, the plan, the run log, the design and findings.
-4. **Compact is the only reset**, and it is manual. The engine's automatic compaction
-   inside one conversation is untouched — it is the safety net, not the feature.
+3. **The transcript stays.** Old messages remain in the session and the chat; the
+   project document remains the durable, dated record of the work.
+4. **Compact is the manual form of the engine's automatic compaction.** Both condense
+   the model's context inside the same conversation; neither is a reset.
 5. **The handover is the engine's summary**, not one we write.
 6. **Mode is chosen at send, not on toggle.**
 7. **The project's memory is durable and dated**: the operator's words verbatim, the
    decisions answered, the last handover — in the project document.
 8. **One file**: `project.md` holds the head, the handover, the Notes and the Log.
-9. **"Always Allow" grants carry across a compact.** Compaction is about context, not
-   consent.
+9. **"Always Allow" grants survive a compact.** The session is the same, so no grant
+   has to be carried anywhere.
 10. **A persona is Single-only and project-only.** It lives in
     `.project\persona.json`, never in the config, the project document or the records
     commit. Multi ignores it; the Multi brief only says that a Single-mode persona is on
@@ -66,19 +67,19 @@ handover, and it is text we can read.
    30–120 s on a big context, and the chip shows "Compacting…" while nothing else can
    be sent.
 3. Write the summary into the project document; append a compacted line to the Log.
-4. Create the new session in the same folder, with the project's mode, Keep Building
-   flag and model; brief it.
-5. Delete the old session; broadcast the new id so other views re-point.
-6. The new chat renders the post from the project document.
+4. Leaving the same session in place, reload its transcript. The engine's compaction
+   row is the only new card; the chat, draft and scroll stay.
+5. Broadcast `project.compacted` with `inPlace: true`; other views reload the same
+   chat.
 
-**Failures, in the order they can happen.** No handover → nothing is created or
-deleted and the operator sees the error (504); the engine refusing to compact → 502;
-a working project → 409; nothing to compact → 400. A handover written whose new
-session then fails to create leaves the handover in place and the old chat alive; the
-next attempt overwrites it. There is no silent discard — the handover is the point.
+**Failures, in the order they can happen.** No handover → nothing is written and the
+operator sees the error (504); the engine refusing to compact → 502; a working project
+→ 409; nothing to compact → 400. There is no silent discard — the handover is the
+point.
 
-The post lives in the new session's metadata (`synapse.compacted`) so it survives a
-reload; the handover lives in `project.md` for the brief.
+There is no new session and no `synapse.compacted` post for this path. Legacy chats
+created by the old replacement compact still show their start post from metadata; the
+handover lives in `project.md` for the brief.
 
 ## The state folder
 

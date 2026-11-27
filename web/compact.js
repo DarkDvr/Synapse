@@ -1,38 +1,35 @@
-// Discard this conversation and leave a handover.
+// Compact the model's context and leave a handover.
 //
-// The only reset there is: the engine writes a summary of the whole conversation, the
-// server puts it in the project document and starts a fresh chat, and the new chat
-// shows one post where the old one was. The chip is hidden unless a compact can
-// actually run — a project is open, nothing is working, and there is something to
-// discard — so it never sits there greyed out.
+// The chat stays exactly where it is. The engine writes a summary, the server puts
+// it in the project document, and the transcript gains one more compaction card.
+// This is the manual form of the engine's own automatic compaction. The chip is
+// hidden unless a compact can actually run — a project is open, nothing is working,
+// and there is something to compact — so it never sits there greyed out.
 //
-// One thing comes from app.js: opening the new chat. Wired at boot.
+// One thing comes from app.js: reloading the transcript after the engine writes its
+// card. Wired at boot.
 import { state } from './state.js';
-import { esc } from './format.js';
 import { $ } from './dom.js';
 import { api } from './api.js';
 import { toast } from './toast.js';
-import { renderTranscript } from './transcript.js';
-import { findSession, loadProjects } from './projects.js';
+import { findSession } from './projects.js';
 import { renderComposer } from './composer.js';
 
 const missing = (name) => () => {
   throw new Error(`compact.js: ${name} was not wired at boot`);
 };
-const wired = { openSession: missing('openSession') };
+const wired = { loadMessages: missing('loadMessages') };
 
 /** Hand this module the one thing that lives in app.js. Called once, at boot. */
 export function compactWiring(fns) {
   Object.assign(wired, fns);
 }
 
-// ── compact: discard this conversation, leave a handover ─────────
+// ── compact: condense the context, keep the chat ────────────────
 //
-// The only reset. The engine writes the handover from the whole conversation,
-// the server puts it in the project document and starts a fresh chat, and the
-// new chat shows one post where the old conversation was. The chip is hidden
-// unless a compact can actually run — a project is open, nothing is working, and
-// there is something to discard — so it never sits there greyed out.
+// The engine writes the handover from the whole conversation, the server puts it
+// in the project document, and the existing transcript gets a compaction card. No
+// new session, no cleared messages, no lost draft.
 export const COMPACT_CONFIRM_MS = 3000;
 export let compactTimer = 0;
 
@@ -67,7 +64,7 @@ export function renderCompactChip() {
     btn.disabled = true;
     btn.classList.remove('is-confirm');
     btn.textContent = 'Compacting…';
-    btn.title = 'The engine is writing the handover. The chat is replaced when it is done.';
+    btn.title = 'The engine is writing the handover. The chat stays; a compaction card appears when it is done.';
     return;
   }
   const ready =
@@ -85,14 +82,11 @@ export function renderCompactChip() {
   btn.disabled = false;
   btn.classList.toggle('is-confirm', confirming);
   if (confirming) {
-    const open = (state.planState?.plan?.tasks || []).filter((t) => t.status !== 'done').length;
-    const total = chatMessageCount();
-    const tasks = open ? ` · ${open} task${open === 1 ? '' : 's'} unfinished` : '';
-    btn.textContent = `Discard ${total} message${total === 1 ? '' : 's'}? The files stay${tasks}`;
-    btn.title = 'Click again to discard this conversation. The plan, the project document and every file stay.';
+    btn.textContent = 'Compact the context?';
+    btn.title = 'Click again to compact the context. The chat, the plan, the project document and every file stay.';
   } else {
     btn.textContent = 'Compact';
-    btn.title = 'Discard this conversation and start fresh. The plan, the project document and every file stay.';
+    btn.title = 'Compact the model context and leave a handover. The chat, the plan, the project document and every file stay.';
   }
 }
 
@@ -120,17 +114,11 @@ export async function runCompact() {
   renderCompactChip();
   renderComposer();
   try {
-    const out = await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/compact`);
+    await api('POST', `/api/sessions/${encodeURIComponent(sessionId)}/compact`);
     state.compacting = false;
-    state.messages = [];
-    // The old chat has just left the list on purpose; do not read that as "the
-    // open chat was removed" and close the view before opening its replacement.
-    await loadProjects({ keepOpen: true });
-    if (out?.sessionId && state.sessionId !== out.sessionId) {
-      // The replacement is the same conversation, not another one: open it without
-      // clearing the unsent draft or attachments the operator already has in the box.
-      await wired.openSession(out.sessionId, { keepDraft: true });
-    }
+    // Same session, same draft, same scroll: fetch the transcript so the new
+    // compaction card appears where the engine wrote it.
+    await wired.loadMessages();
   } catch (err) {
     state.compacting = false;
     renderCompactChip();

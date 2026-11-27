@@ -324,15 +324,16 @@ contract('the rail names LAN clients under the address, not a Views row', () => 
   assert.doesNotMatch(js, /function renderViews\(/);
 });
 
-// 1 Nov: a compact is meant to leave one post, not a list of the runs that came
-// before it. The folds and the amber alarm lines are page state per project, so they
-// outlived the conversation they described and reappeared above the fresh chat.
-contract('a compact takes the discarded chat’s folds and alarms with it', () => {
+// A manual compact now matches the automatic one: the chat stays, so its folds
+// and alarms stay too. Only a legacy replacement clears them.
+contract('a compact keeps the chat, and a legacy replacement still cleans up', () => {
   const js = read('web/app.js');
   const at = js.indexOf("ev.type === 'project.compacted'");
   assert.notEqual(at, -1, 'the compacted event is still handled');
-  const branch = js.slice(at, at + 1200);
-  assert.match(branch, /forgetConversation\(/, 'the handler clears them before opening the new chat');
+  const branch = js.slice(at, at + 1600);
+  assert.match(branch, /const inPlace = ev\.inPlace === true \|\| ev\.sessionId === ev\.oldSessionId/, 'the in-place case is recognised');
+  assert.match(branch, /if \(ev\.sessionId === state\.sessionId\) loadMessages\(\)/, 'the same chat reloads its transcript');
+  assert.match(branch, /forgetConversation\(/, 'the legacy replacement still clears the old folds');
   // 6 Nov: the fold store went to ./traces.js with the trace it belongs to.
   const traces = read('web/traces.js');
   assert.match(traces, /function forgetConversation\(dir, oldSessionId\)/);

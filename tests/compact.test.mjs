@@ -1,13 +1,12 @@
-// Compaction: the conversation is discarded, a handover is kept, a fresh chat
-// starts. The rules that matter are about what must NOT happen when a compact
-// fails — nothing is deleted without a handover.
+// Compaction: the context is condensed and a handover is kept; the chat stays.
+// The rules that matter are about what must NOT happen when a compact fails —
+// no handover means no document change and no session replacement.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
 import { createApi } from '../src/api.js';
-import { SINGLE_RULES } from '../src/permissions.js';
 import { tmpdir } from './tmpdir.mjs';
 
 const project = () => tmpdir('synapse-compact-');
@@ -94,43 +93,30 @@ function harness({
   return { api, calls, notes, compaction };
 }
 
-test('a compact writes the handover, starts a fresh chat and deletes the old one', async () => {
+test('a compact writes the handover and keeps the same chat', async () => {
   const dir = project();
   const h = harness({ dir });
   const out = await h.api.compactSession('ses_old', { timeoutMs: 3000 });
 
   assert.equal(out.ok, true);
-  assert.equal(out.sessionId, 'ses_new');
+  assert.equal(out.inPlace, true);
+  assert.equal(out.sessionId, 'ses_old');
   assert.equal(out.oldSessionId, 'ses_old');
   assert.equal(out.summary.includes('Finish the thing'), true);
 
-  // The handover is in the project document before anything is thrown away.
+  // The handover is in the project document, and the marker says in place.
   const doc = fs.readFileSync(path.join(dir, '.project', 'project.md'), 'utf8');
   assert.match(doc, /## Handover[\s\S]*Finish the thing/);
-  assert.match(doc, /### compact · /);
+  assert.match(doc, /### compact · [\s\S]*compacted in place/);
 
-  const create = h.calls.find((c) => c.at === 'create');
-  assert.equal(create.body.directory, dir);
-  assert.deepEqual(create.body.model, { ref: 'deepseek/deepseek-flash', variant: 'high' });
-  assert.equal(create.body.metadata.synapse.auto, true);
-  assert.match(create.body.metadata.synapse.compacted.summary, /Finish the thing/);
-  assert.equal(create.body.metadata.synapse.compacted.messages, 2);
-
-  assert.ok(h.calls.some((c) => c.at === 'delete' && c.sessionId === 'ses_old'));
-  assert.ok(h.calls.some((c) => c.at === 'carry' && c.from === 'ses_old' && c.to === 'ses_new'));
+  assert.equal(h.calls.some((c) => c.at === 'create'), false);
+  assert.equal(h.calls.some((c) => c.at === 'delete'), false);
+  assert.equal(h.calls.some((c) => c.at === 'carry'), false);
   const told = h.notes.filter((n) => n.type === 'project.compacted');
   assert.equal(told.length, 1);
+  assert.equal(told[0].inPlace, true);
   assert.equal(told[0].oldSessionId, 'ses_old');
-  assert.equal(told[0].sessionId, 'ses_new');
-  fs.rmSync(dir, { recursive: true, force: true });
-});
-
-test('the new chat keeps the mode and the permission ruleset', async () => {
-  const dir = project();
-  const h = harness({ dir, single: true });
-  await h.api.compactSession('ses_old', { timeoutMs: 3000 });
-  const create = h.calls.find((c) => c.at === 'create');
-  assert.deepEqual(create.body.permissions, SINGLE_RULES);
+  assert.equal(told[0].sessionId, 'ses_old');
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

@@ -53,11 +53,11 @@ Ids are stable: they are the ticket and scenario names. `M` = must, `P` = pain t
 | A8 | a message with `error` | the error inside the post, red | M: readable, persists across reload, never a toast only |
 | A9 | a provider error frame | the provider's own sentence, labelled as theirs | M: not mistakable for a harness crash |
 | A10 | a `synthetic` message | "Synapse · <label>", yellow rule | M: four variants — report, loaded instructions (one line + fold), PROHIBITED (one red line, folds open), plain |
-| A11 | a compaction | a post at the top of the new chat: "Compacted <when> · N messages" | M: survives a reload; replaced by the next compact; the only thing in a fresh chat |
+| A11 | a compaction | a tool-card row at the point of compaction: "Compacted ×N", the context figure, state pill and fold | M: survives a reload; the chat stays; a legacy chat created by the old replacement compact may still show its "Compacted <when>" start post |
 | A12 | consecutive assistant steps | one post | M: a line that arrived between two steps must not move to the end of the turn; the pane belongs to the newest assistant post. P: the merge hides which step a card came from |
 | A13 | any post rebuilt | — | M: **nothing the operator opened closes**, across a poll, a regroup or a trace update. P: a message fold that rolls into the archive loses its own key |
 | A14 | closing a Single-mode persona, or bringing it back | one yellow Synapse note: `persona off` / `persona on`, with **Compact** | M: appears only when there was a persona; names it; recommends compaction rather than doing it; clears on the next send or chat; never sent to the model |
-| A15 | the last operator prompt, while the chat is idle | a quiet **Remove Exchange** chip in the chat tools; hovering it tints the posts it would take; the first click asks `Remove Exchange?`, the second within three seconds removes | M: only in Single, only the newest prompt, and only when nothing is live, queued, asking or waiting; the prompt and every engine message after it go; the files, plan and worker work stay; the posts collapse in 500ms and the timeout returns the chip to idle without deleting |
+| A15 | the last operator prompt, while the chat is idle | a quiet **Remove Exchange** button in that message's header, left of Reuse; hovering it tints the posts it would take red; the first click asks `Remove Exchange?`, the second within three seconds removes | M: only in Single, only the newest prompt, and only when nothing is live, queued, asking or waiting; the prompt and every engine message after it go; the files, plan and worker work stay; the posts collapse in 500ms and the timeout returns the button to idle without deleting |
 
 ### B. Prose
 
