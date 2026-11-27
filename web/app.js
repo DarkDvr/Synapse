@@ -3109,8 +3109,8 @@ async function bootPage() {
   projectsWiring({ createChat, openSession, setEventChip, showNothing });
   // The model menu asks for the labels, the issues title and the select fill.
   modelPickerWiring({ fillRoleModels, modelLabel, modelMeta, modelTitle, issuesTitle });
-  // The compact chip opens the new chat; the role cards ask for their labels, the
-  // settings dialog and the cards' activity.
+  // The compact chip reloads this chat after the engine writes its card; the role
+  // cards ask for their labels, the settings dialog and the cards' activity.
   compactWiring({ loadMessages });
   removeExchangeWiring({ loadMessages });
   roleModelsWiring({ modelLabel, modelTitle, openDialog, renderRoleActivity });

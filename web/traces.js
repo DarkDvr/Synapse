@@ -34,13 +34,14 @@ export function tracesWiring(fns) {
 }
 
 /**
- * After a compact, the chat is meant to be one post and the new conversation.
+ * Legacy cleanup for a compact that replaced the conversation.
  *
- * The fold lines (one per finished run) and the amber alarm lines are page state kept
- * per project, not messages, so they outlived the conversation they described and
- * reappeared above the fresh chat (1 Nov: eleven folds and an alarm under the
- * "Compacted" post). They are that chat's evidence — the run log still has them — so
- * they go with it. The new chat starts with its post and nothing above it.
+ * Modern compacts happen in place and keep their folds and alarms. The old
+ * replacement path still calls this: the fold lines (one per finished run) and the
+ * amber alarm lines are page state kept per project, not messages, so they outlived
+ * the conversation they described and reappeared above the fresh chat (1 Nov:
+ * eleven folds and an alarm under the "Compacted" post). They are that chat's
+ * evidence — the run log still has them — so they go with it.
  */
 export function forgetConversation(dir, oldSessionId) {
   const key = dir ? dirKey(dir) : '';

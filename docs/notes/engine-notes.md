@@ -460,7 +460,8 @@ status/diff, keep what is done, continue, do not repeat". Three replacements per
 path applies.
 
 **"Keep" writes a deliberate project copy (28 Oct).** An attachment is normally inline in the operator's
-message, where a compaction may summarise it and a project compact deletes it. Checking **Keep** writes
+message, where a compaction may leave it out of the model's context; the session still has it, but the
+durable copy is what survives. Checking **Keep** writes
 the bytes to `.project/attachments/<stamp>-<name>` before the prompt, appends a `### attachment` line to
 the Log, and every brief says the folder exists. Unchecking writes nothing, deleting the project deletes
 it, and the timestamp stops a second keep overwriting the first.

@@ -47,8 +47,8 @@ export function compactPostOf() {
 
 /**
  * How many messages the chat is actually showing. The engine's list also holds
- * idle markers and system notes, so counting it said "Discard 7 messages?" over
- * a four-message conversation — a number the operator could not find anywhere.
+ * idle markers and system notes, so counting it overcounted a four-message
+ * conversation — a number the operator could not find anywhere.
  */
 export function chatMessageCount() {
   return (state.messages || []).filter(

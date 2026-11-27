@@ -362,9 +362,9 @@ export function renderTranscript() {
   // A mode switch with a persona leaves one harness note at the end of the chat;
   // it is not a message and it is not sent to the model.
   const modeNote = modeNoteHtml();
-  // The post a compact left: the only thing the new chat starts with. It is not
-  // a message — no speaker — and it comes from this chat's own metadata, so it
-  // survives a reload and is gone when the next compact replaces the chat.
+  // The post a legacy replacement compact left: the only thing that new chat
+  // started with. Modern compacts keep their transcript and add a card instead;
+  // this path remains so older chats still show their start post.
   const compactPost = wired.compactPostOf();
   const postHtml = compactPost ? compactPostHtml(compactPost) : '';
   // A question needs room even when the conversation is empty: the panel is the
