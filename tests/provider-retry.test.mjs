@@ -137,7 +137,7 @@ function makeEngine({ dir, script, wakeScript, hangWakeRead = false, hangWakeSes
   return { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts };
 }
 
-async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, stopWakeAfter = 0, untilWoke = 1, harnessStopAfter = 0, harnessReason = '', delegates = 1, hangWakeRead = false, hangWakeSession = false }) {
+async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], roleRef = 'opencode/deepseek-v4.1-flash-free', cancelAfter = 0, stopWakeAfter = 0, untilWoke = 1, harnessStopAfter = 0, harnessReason = '', delegates = 1, hangWakeRead = false, hangWakeSession = false, localLease = null, localArchitect = false }) {
   const dir = project(name);
   const runsFile = path.join(dir, '.project', 'runs.jsonl');
   const { engine, sessions, woke, descriptions, interrupts, created, deleted, prompts } = makeEngine({ dir, script, wakeScript, hangWakeRead, hangWakeSession });
@@ -155,11 +155,18 @@ async function runCase({ name, script, wakeScript = [{}], ladder = ['coder-1'], 
       }),
     },
     getConfig: () => ({
-      roles: { 'coder-1': { ref: roleRef } },
+      roles: {
+        'coder-1': { ref: roleRef },
+        ...(localArchitect ? { architect: { ref: 'local/arch' } } : {}),
+      },
+      ...(localArchitect
+        ? { engine: { opencode: { providers: [{ id: 'local', type: 'local', baseURL: 'http://127.0.0.1:9/v1', models: [] }] } } }
+        : {}),
       worker: { ladder, stallSec: 30, resumeMax: 2, retryBaseSec: 5, retryCapSec: 10 },
     }),
     modelCache: { get: () => null, noteIssue: (ref, issue) => { noted.push({ ref, issue }); return true; } },
     notify: (ev) => events.push(ev),
+    localLease,
   });
 
   const parts = [];
@@ -259,6 +266,12 @@ expect(
   classifyFailure('request (17704 tokens) exceeds the available context size (16384 tokens)').kind,
 );
 expect('unknown defaults to transient', classifyFailure('a brand new sentence').kind === 'transient');
+expect(
+  'a programmer error is terminal, not retried',
+  classifyFailure('path is not defined').kind === 'terminal' &&
+    classifyFailure('path is not defined').reason === 'programmer',
+  JSON.stringify(classifyFailure('path is not defined')),
+);
 // A prompt that does not fit is neither: retrying it cannot help, and it is not
 // the end of the run - a compaction makes it fit. Local servers set to "Stop at
 // Limit" answer this way, and OpenAI wraps it in a 400, so this rule is tested
@@ -397,6 +410,23 @@ expect(
   'wake: a session read that never answers does not swallow the report',
   hungSession.woke.length === 1,
   `woke=${hungSession.woke.length}`,
+);
+
+// 6a3. The local-lease branch is the one that used to ReferenceError before any
+// HTTP was composed. Exercise it with a real lease-shaped stub.
+const localWake = await runCase({
+  name: 'local-wake',
+  script: [{}],
+  localArchitect: true,
+  localLease: {
+    acquire: async (request) => ({ ...request }),
+    releaseSession: () => {},
+  },
+});
+expect(
+  'wake: a local Architect still gets the report through the lease',
+  localWake.woke.length === 1,
+  `woke=${localWake.woke.length}`,
 );
 
 // 6b. Stop on the Architect ends the wake loop: no retry, no second synthetic.

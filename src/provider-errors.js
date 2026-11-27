@@ -40,6 +40,14 @@ const PRUNE_EVERY_MS = 6 * 60 * 60 * 1000;
  */
 const RULES = [
   {
+    // A programmer error is not a provider saying "not now". Retrying a broken
+    // harness for a week is how a ReferenceError in the wake path looked like a
+    // dead local server (27 Nov). These are terminal and named as ours.
+    reason: 'programmer',
+    kind: 'terminal',
+    re: /\b(?:ReferenceError|TypeError)\b|is not defined|is not a function|cannot read (?:properties|property)|undefined is not|null is not/i,
+  },
+  {
     // The session (or the folder it ran in) no longer exists. That is the operator
     // deleting it — stopped the run, deleted the session, removed the project — so
     // no retry can succeed and there is nothing to report as a failure either.
