@@ -98,6 +98,37 @@ export function selectionFor(roleId) {
   return asSelection(state.config?.roles?.[roleId]) || { ref: '', variant: '' };
 }
 
+/**
+ * What a newly created chat should put in a role before it exists.
+ *
+ * The project's own choice wins while its model is still offered. If it is not —
+ * the usual case after a provider is removed — the newest project that used a
+ * model this catalog still offers supplies it, role by role, rather than copying
+ * a dead ref into a new project and making every card say "No model".
+ */
+export function seedSelection(roleId) {
+  const models = Array.isArray(state.models) ? state.models : [];
+  const offered = new Set(models.map((m) => String(m?.ref || '')).filter(Boolean));
+  const usable = (entry) => {
+    const sel = asSelection(entry);
+    return sel?.ref && offered.has(sel.ref) ? sel : null;
+  };
+  const current = usable(selectionFor(roleId));
+  if (current) return current;
+  if (!offered.size) return asSelection(selectionFor(roleId));
+  const recency = (project) =>
+    Math.max(0, ...(project?.sessions || []).map((s) => Number(s?.updated) || 0));
+  const projects = [...(state.projects || [])].sort((a, b) => recency(b) - recency(a));
+  for (const project of projects) {
+    const found = usable(project?.roles?.[roleId]);
+    if (found) return found;
+  }
+  const configured = usable(state.config?.roles?.[roleId]);
+  if (configured) return configured;
+  const fallback = models.find((m) => m.free) || models[0];
+  return fallback?.ref ? { ref: fallback.ref, variant: '' } : null;
+}
+
 /** The Architect is a role like any other — no "default model" exists. */
 export function architectSelection() {
   const sel = selectionFor('architect');

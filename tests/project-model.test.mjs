@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { state } from '../web/state.js';
-import { selectionFor, architectSelection } from '../web/run-view.js';
+import { selectionFor, architectSelection, seedSelection } from '../web/run-view.js';
 
 function withState({ sessionId = null, sessions = [], roles = {}, config = {} } = {}) {
   const before = {
@@ -105,6 +105,22 @@ test('with no chat open, a new project inherits the newest project set', () => {
   try {
     assert.deepEqual(selectionFor('architect'), { ref: 'provider/model-b', variant: '' });
     assert.deepEqual(selectionFor('coder-1'), { ref: 'provider/model-c', variant: '' });
+  } finally {
+    restore();
+  }
+});
+
+test('a new project seeds from the newest project that still has an offered model', () => {
+  const restore = withState({ sessionId: null, sessions: [], roles: {} });
+  try {
+    state.projects = [
+      { id: 'new', sessions: [], roles: {} },
+      // The newest project used a provider that is no longer configured.
+      { id: 'latest', sessions: [{ id: 's2', model: 'gone/model', updated: 20 }], roles: { 'coder-1': { ref: 'gone/model' } } },
+      { id: 'older', sessions: [{ id: 's1', model: 'provider/model-b', updated: 10 }], roles: { 'coder-1': { ref: 'provider/model-c' } } },
+    ];
+    state.config = { roles: { 'coder-1': { ref: 'gone/model' } } };
+    assert.deepEqual(seedSelection('coder-1'), { ref: 'provider/model-c', variant: '' });
   } finally {
     restore();
   }
