@@ -15,7 +15,7 @@ The schema dump is a starting point, not the truth; the running engine is.
 | `POST /api/session/{id}/generate` | one-shot completion, `{data:{text}}`, **adds nothing to the transcript**. |
 | `POST /api/session/{id}/prompt` | an inbox entry: returns in ~100 ms while a turn runs; takes `text, files, agents, skills, metadata, delivery, resume`. |
 | an attachment | **`{uri, name}`**; a `data:` URI is accepted. |
-| `GET /api/session/{id}/message` | **singular**, and `prompt` only *admits* the message — `POST /api/experimental/session/{id}/wait` blocks until idle. `limit` + `order=desc` gives the newest page; take `cursor.previous` for the page before it, and do not send `order` with a cursor. |
+| `GET /api/session/{id}/message` | **singular**, and `prompt` only *admits* the message — `POST /api/experimental/session/{id}/wait` blocks until idle. `limit` + `order=desc` gives the newest page; with that order the **older** page is `cursor.next`, and a cursor request must not send `order`. |
 | `GET /api/session/active` | the authority on what is running; survives a restart. |
 | `GET /api/form` | scoped by `x-opencode-directory`; from the workspace root it always answers `[]`. |
 | `GET /api/pending` | pending forms, and `canStop` for the open session's project. |

@@ -17,14 +17,14 @@ test('the first page asks for newest first and keeps the previous cursor', async
         { id: 'm2', type: 'assistant', time: { created: 2 } },
         { id: 'm1', type: 'user', time: { created: 1 } },
       ],
-      cursor: { previous: 'before-m1', next: null },
+      cursor: { previous: null, next: 'older-than-m1' },
     };
   };
   const page = await engine.getMessagesPage('ses_x');
   assert.match(calls[0].path, /limit=200&order=desc$/);
   assert.deepEqual(page.messages.map((m) => m.id), ['m1', 'm2']);
-  assert.equal(page.cursor.previous, 'before-m1');
-  assert.equal(page.cursor.next, null);
+  assert.equal(page.cursor.next, 'older-than-m1');
+  assert.equal(page.cursor.older, 'older-than-m1');
 });
 
 test('an older page uses only the cursor, not order', async () => {

@@ -78,8 +78,8 @@ operator sees the error (504); the engine refusing to compact → 502; a working
 point.
 
 **The transcript is a window, not the whole store.** The first load is the newest 200
-engine messages. When the engine returns a `cursor.previous`, the chat shows a
-**Load Earlier** button at the top; it fetches that page, prepends it and moves the
+engine messages. When the engine returns an older `cursor` (with `order=desc` that is
+`cursor.next`), the chat shows a **Load Earlier** button at the top; it fetches that page, prepends it and moves the
 scroll by the added height. Once earlier pages are loaded, a poll merges the newest
 page with the older messages instead of replacing them. The cursor and merge are why
 a weeks-old chat stays bounded on screen without silently dropping what the operator

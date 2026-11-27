@@ -825,6 +825,9 @@ export class OpenCodeEngine extends Engine {
       cursor: {
         previous: r?.cursor?.previous ?? null,
         next: r?.cursor?.next ?? null,
+        // With `order=desc`, the engine puts the older page on `next`; a cursor
+        // request continues in that same direction. Name it once for callers.
+        older: r?.cursor?.next ?? null,
       },
     };
   }

@@ -1268,7 +1268,7 @@ async function loadMessages() {
     state.removeInfo = answer.remove || null;
     // The button is only meaningful while there is a page before the oldest one.
     // A poll does not move that cursor once earlier pages are loaded.
-    if (!state.loadedEarlier) state.earlierCursor = answer.cursor?.previous || null;
+    if (!state.loadedEarlier) state.earlierCursor = answer.cursor?.older || null;
     // A steer this page painted the moment it was sent is not in the engine's
     // transcript until the model has read it. Dropping it here made the operator's
     // own sentence vanish for minutes - the "no confirmation" they reported
@@ -1382,7 +1382,7 @@ async function loadEarlier() {
     const known = new Set((state.messages || []).map((m) => String(m?.id || '')).filter(Boolean));
     const older = (page.messages || []).filter((m) => m?.id && !known.has(String(m.id)));
     state.messages = [...older, ...(state.messages || [])];
-    state.earlierCursor = page.cursor?.previous || null;
+    state.earlierCursor = page.cursor?.older || null;
     state.loadedEarlier = true;
     renderTranscript();
     if (scroller) scroller.scrollTop = fromTop + (scroller.scrollHeight - fromHeight);
