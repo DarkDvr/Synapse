@@ -20,6 +20,11 @@ import { vacuumStore } from '../engine-store.js';
 import { purgeProjectTraces } from '../engine-project-purge.js';
 
 const ENGINE_USERNAME = 'opencode';
+// A dead engine connection must not hold a workflow for ever. Every control
+// request is short (prompts and synthetic messages are admitted, not waited on);
+// 30s is many times a local answer and short enough that a poisoned keep-alive
+// socket surfaces as an error the caller can retry.
+const ENGINE_REQUEST_TIMEOUT_MS = 30_000;
 // What the engine reports as a model's output limit when a provider entry carries
 // no limit at all (measured: a custom provider with no `limit` gets context 200,000
 // and output 32,000). Written beside a measured context so the pair is valid and the
@@ -602,7 +607,20 @@ export class OpenCodeEngine extends Engine {
       headers['content-type'] = 'application/json';
       payload = JSON.stringify(body);
     }
-    const res = await fetch(this.base + apiPath, { method, headers, body: payload });
+    let res;
+    try {
+      res = await fetch(this.base + apiPath, {
+        method,
+        headers,
+        body: payload,
+        signal: AbortSignal.timeout(ENGINE_REQUEST_TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+        throw new Error(`${method} ${apiPath} -> no answer within ${ENGINE_REQUEST_TIMEOUT_MS / 1000}s`);
+      }
+      throw err;
+    }
     const text = await res.text();
     let json = null;
     try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
