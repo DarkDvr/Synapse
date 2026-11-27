@@ -43,7 +43,6 @@ export function transcriptWiring(fns) {
 
 /** One compaction, in the same tool-shaped row a worker's trace uses. */
 function compactionLine(m, line = '') {
-  const running = String(m.raw?.status || '') === 'running';
   const list = state.messages || [];
   // The count is this compaction's place in the chat. The transcript normally holds
   // the message being rendered; a direct call (a test, a preview) does not, and then
@@ -65,6 +64,29 @@ function compactionLine(m, line = '') {
   // summary request instead of the history (measured 13 Nov: 882 tokens on a full window).
   // No number is better than a wrong one, so the line then says only that it happened.
   const size = summed && (!limit || summed <= limit) ? summed : 0;
+  // The engine records when the compaction started, not when it ended. Time the
+  // card the page actually watched; a compaction first seen already complete has
+  // no honest duration.
+  const status = String(m.raw?.status || '');
+  const running = status === 'running';
+  const startedAt = Number(m.raw?.time?.created) || Number(m.created) || 0;
+  if (running && m.id && !state.compactionStarted.has(m.id)) {
+    state.compactionStarted.set(m.id, startedAt || Date.now());
+  }
+  if (!running && m.id && !state.compactionDone.has(m.id) && state.compactionStarted.has(m.id)) {
+    state.compactionDone.set(m.id, Math.max(0, Date.now() - state.compactionStarted.get(m.id)));
+    state.compactionStarted.delete(m.id);
+  }
+  const durationMs = running
+    ? (state.compactionStarted.has(m.id) ? Date.now() - state.compactionStarted.get(m.id) : 0)
+    : (state.compactionDone.get(m.id) || 0);
+  // The summary's own usage is the prompt it summarised, not the new context. The
+  // first assistant step after the compaction is the honest "after" figure.
+  const later = list.find(
+    (x) => x.type === 'assistant' && Number(x.created) > Number(m.created) && x.raw?.tokens,
+  );
+  const afterTokens = later ? (Number(later.raw.tokens.input) || 0) + (Number(later.raw.tokens.cache?.read) || 0) : 0;
+  const after = afterTokens && (!limit || afterTokens <= limit) ? afterTokens : 0;
   const key = `compact:${m.id || 'latest'}`;
   return compactRow({
     id: m.id || '',
@@ -72,7 +94,9 @@ function compactionLine(m, line = '') {
     count: index,
     size,
     limit,
-    status: String(m.raw?.status || ''),
+    after,
+    durationMs,
+    status,
     error: String(m.error || m.raw?.error?.message || ''),
     open: state.open.has(key),
     line,
@@ -391,9 +415,10 @@ export function renderTranscript() {
   // a finished one's text cannot change, and the length is what the check is for.
   const messageSig = (m) => {
     const live = m.type === 'assistant' && !m.completed;
+    const status = m.type === 'compaction' ? `:${String(m.raw?.status || '')}` : '';
     return (m.parts || [])
       .map((p) => `${p.type}${live && p.type === 'text' ? `:${String(p.text || '').length}` : ''}${p.status ? `.${p.status}` : ''}`)
-      .join(',');
+      .join(',') + status;
   };
   const sig = hasHistory
     ? `${showable.map((m) => `${m.id}:${m.completed || 0}:${messageSig(m)}`).join(',')}|${pending.length}|${modeNote ? state.modeNote?.at || 1 : 0}|${waitPost ? 1 : 0}|${state.streaming}|${traceSig()}|${alarmsHere().length}|${state.decisionSeq}|${state.downloadSeq}|${

@@ -12,12 +12,21 @@ const compactK = (n) =>
  * chat, `size` the prompt that caused it, `limit` the window. `line` is the optional
  * `data-line` attribute the transcript's arrival animation gives a row.
  */
+const durationText = (ms) => {
+  const s = Math.max(0, Math.round(Number(ms) / 1000));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+};
+
 export function compactRow({
   id = '',
   running = false,
   count = 1,
   size = 0,
   limit = 0,
+  after = 0,
+  durationMs = 0,
   status = '',
   error = '',
   open = false,
@@ -25,9 +34,11 @@ export function compactRow({
 } = {}) {
   const n = Math.max(1, Number(count) || 1);
   const action = running ? 'Compacting' : 'Compacted';
-  const where = Number(size)
-    ? `context at ${compactK(Number(size))}${Number(limit) ? `/${compactK(Number(limit))}` : ''}`
+  const window = Number(limit) ? `/${compactK(Number(limit))}` : '';
+  const context = Number(size)
+    ? `context at ${compactK(Number(size))}${window}${Number(after) ? ` → ${compactK(Number(after))}${window}` : ''}`
     : 'the conversation is being summarised';
+  const where = `${context}${durationMs ? ` · ${durationText(durationMs)}` : ''}`;
   const failed = !running && (String(status) === 'failed' || Boolean(error));
   const cls = running ? 'warn' : failed ? 'err' : 'ok';
   const stateLabel = running ? 'running' : failed ? 'failed' : 'completed';

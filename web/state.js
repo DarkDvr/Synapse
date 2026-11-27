@@ -31,6 +31,11 @@ export const state = {
   // rather than replace it.
   earlierCursor: null,
   loadedEarlier: false,
+  // When each compaction was first seen running, and how long it took once it
+  // finished. The engine does not stamp an end time, so the page times the card it
+  // watched; a compaction first seen already complete has no duration to claim.
+  compactionStarted: new Map(),
+  compactionDone: new Map(),
   // Whether the server would allow removing the last exchange, and where its
   // boundary is. It arrives with the transcript; the server checks again when the
   // operator confirms.

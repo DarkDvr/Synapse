@@ -37,6 +37,29 @@ test('the transcript draws a compaction as that tool card', () => {
   assert.match(html, /Compacting ×1/);
 });
 
+test('a completed card reports its duration and the context after it', () => {
+  const done = compactRow({
+    id: 'c1',
+    running: false,
+    count: 1,
+    size: 110000,
+    limit: 205000,
+    after: 12000,
+    durationMs: 65000,
+    status: 'completed',
+  });
+  assert.match(done, /110K\/205K → 12K\/205K/);
+  assert.match(done, /1m 5s/);
+  assert.match(done, /completed/);
+});
+
+test('a status arriving after the card was drawn changes it to Compacted', () => {
+  state.messages = [{ type: 'compaction', id: 'c1', created: 1, raw: { status: 'running' } }];
+  assert.match(renderMessage(state.messages[0]), /Compacting ×1/);
+  state.messages[0].raw.status = 'completed';
+  assert.match(renderMessage(state.messages[0]), /Compacted ×1/);
+});
+
 test('compaction messages after the pane are moved into the pane post', () => {
   const js = read('web/transcript.js');
   assert.match(js, /const movedCompactions = new Set\(\)/, 'no move is prepared');

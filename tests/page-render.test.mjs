@@ -101,6 +101,19 @@ test('a worker trace renders its steer, its permission and one older-entries fol
   assert.match(html, /outside the project/, 'the refusal reason is not in the tooltip');
 });
 
+test('a compaction status change redraws the card as Compacted', () => {
+  const page = reset([
+    { id: 'a1', type: 'assistant', completed: true, created: 1, parts: [{ type: 'text', text: 'Before.' }] },
+    { id: 'c1', type: 'compaction', created: 2, raw: { status: 'running' } },
+  ]);
+  renderTranscript();
+  assert.match(page.innerHTML, /Compacting ×1/);
+  state.messages[1].raw.status = 'completed';
+  renderTranscript();
+  assert.match(page.innerHTML, /Compacted ×1/);
+  assert.doesNotMatch(page.innerHTML, /Compacting ×1/);
+});
+
 test('Load Earlier appears only when the engine has an older page', () => {
   const page = reset([
     { id: 'm1', type: 'user', text: 'Build it', created: 1 },
