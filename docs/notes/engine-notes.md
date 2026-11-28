@@ -713,6 +713,17 @@ load all four design skills and must load `frontend-design` and `aesthetic-found
 first two; the Inventor may load `frontend-design` and must nothing, because a vague request is where
 direction talk helps it name features rather than categories.
 
+**A chat may load every skill; a role may load its list.** Single is one model in one
+conversation, and it may meet any kind of work — a web page today, a Windows app tomorrow, a
+document the day after — so its session gets **no skill rules at all** (`chatSkillRules()`),
+which is the engine's own "load anything", and the brief names the machine's catalogue
+(`engine.listSkills()`, built-ins excluded, cached for a minute). It used to inherit the
+Architect's list, which exists for judging a team: on 28 Nov a Single chat read
+`frontend-design` in the tool list, was refused it, and spent a turn guessing which skills
+were secretly allowed. Multi keeps the Architect's list; the workers keep theirs. The page
+does not choose: `POST /api/sessions` reads the mode from the ruleset it is given (the
+subagent deny), and the mode switch at send re-composes the set.
+
 **Two rules about the library itself.** `using-superpowers` was deliberately not shipped: it is a rule about
 *when to invoke skills* ("if there is even a 1% chance a skill might apply, you MUST invoke it"), with
 examples naming skills that are not installed here, so a coder spends the turn announcing skills that do not

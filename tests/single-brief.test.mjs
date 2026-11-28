@@ -85,10 +85,24 @@ try {
   // ── the skills line stops speaking about roles and reports in a chat ──
   const cfg = { roles: { architect: { skills: ['visual-review'], mustLoad: ['visual-review'] } } };
   const roleSkills = describeSkills(cfg, 'architect');
-  const chatSkills = describeSkills(cfg, 'architect', { chat: true });
+  const chatSkills = describeSkills(cfg, 'architect', {
+    chat: true,
+    available: ['aesthetic-foundations', 'frontend-design', 'visual-review'],
+  });
   expect('the Architect skills line says judge and report', /judge the next piece of work/.test(roleSkills) && /your report/.test(roleSkills));
   expect('the Single skills line says neither', !/judge/.test(chatSkills) && !/your report/.test(chatSkills), chatSkills);
-  expect('the Single skills line still names the skill', chatSkills.includes('visual-review'));
+  expect(
+    'the Single skills line names what the machine has, not the Architect’s list',
+    chatSkills.includes('frontend-design') && chatSkills.includes('visual-review'),
+    chatSkills,
+  );
+  expect('a chat refuses nothing', !/Any other skill is refused/.test(chatSkills), chatSkills);
+  const noCatalogue = describeSkills(cfg, 'architect', { chat: true });
+  expect(
+    'without the catalogue it still says every skill is open',
+    /every one is open to you/.test(noCatalogue) && !/visual-review/.test(noCatalogue),
+    noCatalogue,
+  );
 
   // ── a Single turn is recorded as a chat, never as the project's request ──
   const makeApi = (singleMode) => {

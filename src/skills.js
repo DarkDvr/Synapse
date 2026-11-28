@@ -45,6 +45,23 @@ export function skillRules(config, role) {
   return rules;
 }
 
+/**
+ * The skill ruleset for a project's chat session.
+ *
+ * Single is a conversation with one model and no team, and it may meet any kind of
+ * work — a web page, a Windows app, a document, a CLI. Its role list used to be the
+ * Architect's, which is chosen for judging a team, so a Single chat could not load the
+ * skills its own work needed while the engine went on advertising them all: on 28 Nov
+ * the model read `frontend-design` in the tool list and was refused it, then spent a
+ * turn guessing which skills were secretly allowed. Single now has no restriction at
+ * all — no rules is the engine's own "load anything" — and the brief names what the
+ * machine has. Multi keeps the Architect's list, because there the Architect's job is
+ * judging work the roles did.
+ */
+export function chatSkillRules(config, single) {
+  return single ? [] : skillRules(config, 'architect');
+}
+
 /** The skills a role must load before it starts, or [] when none were set.
  *
  * A required name that is not in the role's allowed list is not demanded: the
@@ -73,12 +90,23 @@ export function roleMustLoad(config, role) {
  * no report to write, so the wording must not say either. Left as it was, a Single
  * session was told to load its skills "before you judge the next piece of work"
  * and to say so "in your report" — the Architect's words in a plain conversation.
+ * Single is also not the Architect: `available` is the machine's own catalogue (the
+ * engine's list, built-ins excluded), because every one of them is open to it and a
+ * chat may meet any kind of work.
  */
-export function describeSkills(config, role, { chat = false } = {}) {
-  const all = roleSkillList(config, role);
-  if (all === null) return '';
+export function describeSkills(config, role, { chat = false, available = null } = {}) {
+  const list = chat
+    ? (Array.isArray(available) ? available.map((s) => String(s || '').trim()).filter(Boolean) : [])
+    : roleSkillList(config, role);
+  if (list === null) return '';
+  const all = list;
+  if (chat && !all.length) {
+    // The catalogue could not be read. Still true, and it does not name a list that
+    // might be the wrong one: Single has no restriction, so the tool's own list stands.
+    return 'Skills: the skill tool lists what this machine has and every one is open to you — load any of them when the work needs it.';
+  }
   if (!all.length) return 'You have no skills: do the task with the tools you have.';
-  const must = roleMustLoad(config, role);
+  const must = chat ? [] : roleMustLoad(config, role);
   const optional = all.filter((s) => !must.includes(s));
   const before = chat
     ? 'before you start'
@@ -86,17 +114,20 @@ export function describeSkills(config, role, { chat = false } = {}) {
       ? 'before you judge the next piece of work'
       : 'before your first edit';
   const parts = [];
-  if (must.length) {
+  if (chat) {
     parts.push(
-      chat
-        ? `Skills — load every one of them with the skill tool ${before}: ${must.join(', ')}. They are how ` +
-            `this work gets done, and a skill you skipped is part of the job you skipped.`
-        : `Skills for this role — load every one of them with the skill tool ${before}: ${must.join(', ')}. ` +
-            `They are how this role does its work, not optional reading, and a skill you skipped is part of ` +
-            `the job you skipped.`,
+      `Skills — this machine has these, and every one of them is open to you: ${all.join(', ')}. ` +
+        `Load any of them with the skill tool when the work needs it; a skill you skip is a capability the ` +
+        `work went without.`,
+    );
+  } else if (must.length) {
+    parts.push(
+      `Skills for this role — load every one of them with the skill tool ${before}: ${must.join(', ')}. ` +
+        `They are how this role does its work, not optional reading, and a skill you skipped is part of ` +
+        `the job you skipped.`,
     );
   }
-  if (optional.length) parts.push(`Also available when the task needs it: ${optional.join(', ')}.`);
+  if (optional.length && !chat) parts.push(`Also available when the task needs it: ${optional.join(', ')}.`);
   // A skill that ships a script cannot say where the script is: the folder is
   // true on one machine and false on the next. In Timer Test 1 the visual-review
   // skill named the operator's own skills folder, which does not carry it here —
@@ -124,8 +155,12 @@ export function describeSkills(config, role, { chat = false } = {}) {
   } else if (all.includes('app-check')) {
     parts.push(`A Windows app's window is verified with the app-check skill once it is built.`);
   }
+  // In a chat nothing is refused: the list above is what the machine has, and the
+  // tool will load any of it. In a role, the list is the whole permission.
   parts.push(
-    chat ? 'Any other skill is refused. Say which ones you loaded.' : 'Any other skill is refused. Say in your report which ones you loaded.',
+    chat
+      ? 'The list above is this machine’s library: do not hunt the disk for skills, and say so if one you need is missing.'
+      : 'Any other skill is refused. Say in your report which ones you loaded.',
   );
   return parts.join(' ');
 }

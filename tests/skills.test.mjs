@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { describeSkills } from '../src/skills.js';
+import { describeSkills, chatSkillRules } from '../src/skills.js';
 import { SKILLS_DIR } from '../src/paths.js';
 
 const config = {
@@ -21,8 +21,34 @@ const config = {
     designer: { skills: ['aesthetic-foundations', 'visual-review'], mustLoad: ['aesthetic-foundations'] },
     inventor: { skills: ['frontend-design'] },
     silent: { skills: [] },
+    architect: { skills: ['visual-review'] },
   },
 };
+
+// 28 Nov: a Single chat ran with the Architect's list, which is chosen for judging a
+// team, so the engine advertised `frontend-design` and refused it — the model spent a
+// turn guessing what was secretly allowed. A chat may meet any kind of work, so it
+// gets no restriction at all and the brief names the machine's catalogue.
+test('a chat may load every skill, and a Multi Architect keeps its own list', () => {
+  assert.deepEqual(chatSkillRules(config, true), [], 'no rules is the engine’s "load anything"');
+  assert.deepEqual(chatSkillRules(config, false), [
+    { action: 'skill', resource: '*', effect: 'deny' },
+    { action: 'skill', resource: 'visual-review', effect: 'allow' },
+  ]);
+});
+
+test('a chat brief names the machine’s skills and refuses none', () => {
+  const text = describeSkills(config, 'architect', {
+    chat: true,
+    available: ['aesthetic-foundations', 'code-craft', 'frontend-design', 'visual-review'],
+  });
+  for (const name of ['aesthetic-foundations', 'code-craft', 'frontend-design', 'visual-review']) {
+    assert.ok(text.includes(name), `the chat should be told ${name} is open`);
+  }
+  assert.doesNotMatch(text, /Any other skill is refused/);
+  assert.doesNotMatch(text, /judge/i, 'a chat does not judge');
+  assert.match(text, /every one of them is open to you/);
+});
 
 test('a role with the visual-review skill is given the shipped script path', () => {
   const text = describeSkills(config, 'designer');

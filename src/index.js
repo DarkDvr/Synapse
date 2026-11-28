@@ -30,7 +30,7 @@ import { createPermissionLog } from './permission-log.js';
 import { permissionsTimeoutMs } from './auto-answer.js';
 import { createAutoShutdown } from './auto-shutdown.js';
 import { rulesFor, SINGLE_RULES } from './permissions.js';
-import { skillRules } from './skills.js';
+import { chatSkillRules } from './skills.js';
 import { createProbe, discoverToolsetForModel } from './probe.js';
 import { createModelCache, MAX_TOOL_ASKS } from './modelcache.js';
 import { createApi, toClientConfig } from './api.js';
@@ -489,7 +489,9 @@ async function main() {
           await engine.updateSessionPermissions(s.id, [
             ...rulesFor(),
             ...(s.single ? SINGLE_RULES : []),
-            ...skillRules(getConfig(), 'architect'),
+            // A chat may load any skill on the machine; a Multi Architect keeps the
+            // role's own list.
+            ...chatSkillRules(getConfig(), s.single === true),
           ]);
           n += 1;
         }

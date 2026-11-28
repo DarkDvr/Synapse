@@ -12,7 +12,7 @@ import { setHold as holdTimers, clearHold as releaseTimers, isHeld } from './hol
 import { answerTimeoutMs, formPages } from './auto-answer.js';
 import { AUTOMATION_DEFAULTS, AUTOMATION_KEYS, cleanAutomation, nextSynapse, mayEnableAutoShutdown } from './automation.js';
 import { keepAttachments } from './keep-attachments.js';
-import { skillRules, describeSkills } from './skills.js';
+import { skillRules, chatSkillRules, describeSkills } from './skills.js';
 import { lastExchange } from './session-remove.js';
 import { rulesFor, decide, resolvePath, refusalNote, SINGLE_RULES } from './permissions.js';
 import { stopTargets, createStopper } from './stop.js';
@@ -600,6 +600,33 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
   }
 
   /**
+   * The skills the engine will actually offer, without its own built-ins.
+   *
+   * A chat is told what the machine has, and the only authority on that is the engine
+   * that will answer the tool call — the folders on disk are not the whole story (the
+   * engine also reads `~/.agents/skills`). Cached for a minute: a brief is written on
+   * every send, and the catalogue changes when somebody installs a skill, not between
+   * two messages.
+   */
+  let skillCatalogue = { at: 0, names: [] };
+  async function availableSkillNames() {
+    if (Date.now() - skillCatalogue.at < 60_000) return skillCatalogue.names;
+    try {
+      const list = await engine.listSkills?.();
+      const names = (Array.isArray(list) ? list : [])
+        .filter((s) => s && !s.builtin)
+        .map((s) => String(s.name || '').trim())
+        .filter(Boolean);
+      skillCatalogue = { at: Date.now(), names };
+    } catch {
+      // A failed read keeps the last good list; the brief still works, and the next
+      // send tries again.
+      skillCatalogue = { at: Date.now(), names: skillCatalogue.names };
+    }
+    return skillCatalogue.names;
+  }
+
+  /**
    * Tell a session where it is and what the project plan says.
    *
    * This goes through the engine's instruction entries rather than the message
@@ -645,8 +672,13 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         auto,
         single,
         // Single is a chat, not this harness: its skills line may not say "this
-        // role" or "your report", because there is neither.
-        skills: describeSkills(getConfig(), role, { chat: single }),
+        // role" or "your report", because there is neither. And it is not the
+        // Architect either: every skill on the machine is open to it, so the line
+        // names the engine's own catalogue rather than a role's list.
+        skills: describeSkills(getConfig(), role, {
+          chat: single,
+          available: single ? await availableSkillNames() : null,
+        }),
         focus: getConfig()?.roles?.[role]?.focus,
         // Global role instructions are for Multi and the worker roles. A Single
         // Architect speaks from the project's persona or not at all; passing the
@@ -2679,6 +2711,12 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
       } catch (err) {
         app.warn(`could not save the role set for ${project.name}: ${err.message}`);
       }
+      // A chat is created in the mode the caller's ruleset states — the page sends
+      // Single's subagent deny, and the engine reads the session's mode from the same
+      // ruleset. Single gets no skill restriction; Multi gets the Architect's list.
+      const singleChat = body?.single === true ||
+        (Array.isArray(body?.permissions) &&
+          body.permissions.some((r) => r?.action === 'subagent' && r?.effect === 'deny'));
       const session = await engine.createSession({
         // The engine's own title is never shown: the rail names the project. It is
         // set to the project's name so the engine's list is readable in an audit.
@@ -2693,7 +2731,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         permissions: [
           ...rulesFor(),
           ...(Array.isArray(body?.permissions) ? body.permissions : []),
-          ...skillRules(getConfig(), 'architect'),
+          ...chatSkillRules(getConfig(), singleChat),
         ],
         directory: location,
       });
@@ -2966,7 +3004,7 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
           await engine.updateSessionPermissions(sessionId, [
             ...rulesFor(),
             ...(single ? SINGLE_RULES : []),
-            ...skillRules(getConfig(), 'architect'),
+            ...chatSkillRules(getConfig(), single),
           ]);
           app.info(`mode ${applied} -> ${asked} for ${sessionId} (applied at send)`);
           notify?.({ kind: 'sessions', type: EV.mode, sessionId, mode: asked });
