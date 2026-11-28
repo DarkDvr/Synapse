@@ -146,7 +146,9 @@ export function openDialog({
           const rows = (f.items || [])
             .map(
               (it) =>
-                `<li class="dlg-list-row" title="${esc(it.hint || it.name)}">${esc(it.name)}</li>`,
+                `<li class="dlg-list-row" title="${esc(it.hint || it.name)}">${esc(it.name)}` +
+                (it.tag ? `<span class="dlg-list-tag">(${esc(it.tag)})</span>` : '') +
+                `</li>`,
             )
             .join('');
           return `<div class="set-field wide"><span>${esc(f.label)}</span><ul class="dlg-list">${rows}</ul></div>`;

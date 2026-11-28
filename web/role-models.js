@@ -244,7 +244,13 @@ export async function editRoleSettings(roleId) {
       name: 'skillsHere',
       type: 'list',
       label: `Skills it can load (${available.length})`,
-      items: available.map((s) => ({ name: s.name, hint: s.description })),
+      // One name a line, and where the name came from: Synapse ships its own skills
+      // with the app, and the rest are simply present on this machine.
+      items: available.map((s) => ({
+        name: s.name,
+        hint: s.description,
+        tag: s.source === 'synapse' ? 'Synapse' : s.source === 'machine' ? 'Machine' : '',
+      })),
     });
   } else {
     fields.push({
@@ -304,7 +310,7 @@ export async function editRoleSettings(roleId) {
       roleId === 'qc'
         ? 'Tick a skill to let this role load it; “Required” makes the brief demand it, and the Architect is told if it was skipped. Real use is the default focus: the wording, the clipping and the bad input an ordinary person meets.'
         : isPersona
-          ? 'How the Architect speaks in Single mode: a name for its card, and instructions it follows every turn.'
+          ? ''
           : 'Tick a skill to let this role load it; “Required” makes the brief demand it, and the Architect is told if it was skipped. Instructions are added to what the role is told on every turn.',
     fields,
     confirmLabel: 'Save',

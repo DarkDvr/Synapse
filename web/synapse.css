@@ -3197,6 +3197,16 @@ body.is-paused .chat-dock { animation: pause-glow 1.6s ease-in-out infinite; }
   cursor: default;
 }
 .dlg-list-row:hover { background: var(--violet-faint); }
+/* Where the name came from, in the quietest grey the theme carries: it is a fact
+   about the machine, not part of the name. `--muted` is the tone that still passes
+   contrast at this size; a darker grey measured 4.27 against 4.5 and read as an
+   error rather than a label. */
+.dlg-list-tag {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+}
 
 /* the checkbox leads its label, on one row */
 .set-check {  grid-column: 1 / -1;

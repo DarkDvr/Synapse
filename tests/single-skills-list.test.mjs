@@ -30,10 +30,10 @@ const response = (obj) => ({
 });
 
 const SKILLS = [
-  { name: 'aesthetic-foundations', description: 'How a thing should look.', builtin: false },
-  { name: 'frontend-design', description: 'A page with a point of view.', builtin: false },
-  { name: 'visual-review', description: 'Render a page and read the PNG.', builtin: false },
-  { name: 'OpenCode', description: 'The desktop app’s own skill.', builtin: true },
+  { name: 'aesthetic-foundations', description: 'How a thing should look.', builtin: false, source: 'synapse' },
+  { name: 'frontend-design', description: 'A page with a point of view.', builtin: false, source: 'machine' },
+  { name: 'visual-review', description: 'Render a page and read the PNG.', builtin: false, source: 'synapse' },
+  { name: 'OpenCode', description: 'The desktop app’s own skill.', builtin: true, source: 'engine' },
 ];
 
 function seedPage({ mode }) {
@@ -68,14 +68,18 @@ test('a list field is read, not filled in', async () => {
         name: 'skillsHere',
         type: 'list',
         label: 'Skills it can load — all 3 of them',
-        items: [{ name: 'frontend-design', hint: 'A page with a point of view.' }],
+        items: [
+          { name: 'frontend-design', hint: 'A page with a point of view.', tag: 'Machine' },
+          { name: 'visual-review', tag: 'Synapse' },
+        ],
         hint: 'Nothing to tick.',
       },
     ],
   });
   const html = $('dialogBody').innerHTML;
   assert.match(html, /dlg-list/);
-  assert.match(html, /title="A page with a point of view\.">frontend-design</);
+  assert.match(html, /title="A page with a point of view\.">frontend-design<span class="dlg-list-tag">\(Machine\)<\/span>/);
+  assert.match(html, /visual-review<span class="dlg-list-tag">\(Synapse\)<\/span>/);
   assert.doesNotMatch(html, /Nothing to tick\./, 'no prose under a list');
   assert.doesNotMatch(html, /<input/);
   assert.doesNotMatch(html, /data-skill-allow/);
@@ -97,10 +101,16 @@ test('Single lists every skill the Architect can see, and offers no boxes', asyn
   assert.doesNotMatch(html, /data-skill-allow/, 'no allow boxes in Single');
   assert.doesNotMatch(html, /data-skill-must|>Required</, 'nothing is “required” in a chat');
   // The list is reference, not a decision: a name a line, the description on hover,
-  // and no prose taking the room the persona box needs.
-  assert.match(html, /<li class="dlg-list-row" title="A page with a point of view.">frontend-design<\/li>/);
+  // where each name came from, and no prose taking the room the persona box needs.
+  assert.match(
+    html,
+    /<li class="dlg-list-row" title="A page with a point of view\.">frontend-design<span class="dlg-list-tag">\(Machine\)<\/span><\/li>/,
+  );
+  assert.match(html, /visual-review<span class="dlg-list-tag">\(Synapse\)<\/span>/);
   assert.doesNotMatch(html, /A page with a point of view\.<\/li>/, 'the description is not printed');
   assert.match(html, /rows="8"/, 'the persona box takes the height the list gave up');
+  assert.equal($('dialogMessage').textContent, '', 'no paragraph above the fields');
+  assert.equal($('dialogMessage').hidden, true, 'and no empty space where it was');
   // This popup belongs to Single: nothing in it explains Multi.
   assert.doesNotMatch(html, /Multi/);
   closeDialog(null);

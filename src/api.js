@@ -1972,7 +1972,14 @@ export function createApi({ getConfig, applyConfig, power, engine, logger, getBo
         return entry;
       });
       if (!engine.status().ready) return { skills: [], missing: [], paths, bundled: SKILLS_DIR };
-      const skills = await engine.listSkills();
+      const skills = (await engine.listSkills()).map((s) => ({
+        ...s,
+        // Where the name came from: the folder Synapse ships, which travels with the
+        // app, or somewhere else on this machine (`~/.agents/skills`, a folder the
+        // operator configured). The page says which, because "Synapse brings this"
+        // and "this PC happens to have it" are different promises.
+        source: s.builtin ? 'engine' : shipped.has(s.name) ? 'synapse' : 'machine',
+      }));
       const names = new Set(skills.map((s) => s.name));
       const missing = [];
       for (const [role, entry] of Object.entries(config.roles || {})) {
