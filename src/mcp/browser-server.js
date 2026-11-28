@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR, WEB_DIR, PROJECTS_ROOT } from '../paths.js';
-import { artifactDir } from '../browser/artifacts.js';
+import { artifactDir, shotDir } from '../browser/artifacts.js';
 import { browserDownloadsPanel, clickSummary, createBrowser, findEdge, savedAnswer, requestAnswer, domAnswer } from '../browser/browser.js';
 import { askToSignIn } from '../browser/signin.js';
 import { browserSettings } from '../browser/settings.js';
@@ -51,6 +51,9 @@ const cfg = browserSettings();
 // not empty" from the Recycle Bin (11 Nov, reproduced: EPERM). So the path is taken once,
 // and then the process steps out of the project and holds nothing of the operator's.
 const ARTIFACTS = artifactDir();
+// A picture the chat can show goes where every brief says pictures go. The snapshot
+// text and the frame strips stay in ARTIFACTS: they are the tool's own evidence.
+const SHOTS = shotDir();
 const START_DIR = process.cwd();
 // A download is a project file. A server whose cwd is not a project (the projects root,
 // the harness) has no folder to put one in; it must not invent one under the harness.
@@ -594,7 +597,8 @@ async function handle(msg) {
             return toolText(id, `Scrolled to ${y}.`);
           }
           case 'screenshot': {
-            const file = path.join(ARTIFACTS, `shot-${stamp()}.png`);
+            fs.mkdirSync(SHOTS, { recursive: true });
+            const file = path.join(SHOTS, `browser-${stamp()}.png`);
             const png = await browser.screenshot({ full: args.full === true, file });
             const rel = path.relative(START_DIR, file).replace(/\\/g, '/');
             // The size, and what a pixel of it is worth, because a model reading a picture

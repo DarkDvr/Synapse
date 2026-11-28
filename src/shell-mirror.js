@@ -8,7 +8,7 @@
 //
 // The fix is not a permission exception: the harness copies the file into the project,
 // where the model can read it and the operator keeps it — the same rule as the browser
-// writing screenshots into `.project/browser/shots/`. The caller mirrors on each poll so
+// writing a screenshot into `.project/shots/`. The caller mirrors on each poll so
 // the copy grows with the command; the brief names the path.
 import fs from 'node:fs';
 import path from 'node:path';

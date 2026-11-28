@@ -137,8 +137,10 @@ role, always: a brief that says `open` sends the model to a tool that does not e
 - `read { full: true }` scrolls to the end in viewport steps, extracts once, and writes
   the page into `.project\browser\pages\<slug>-<stamp>.md` with a title, source, size
   and short contents. Bounded at 400,000 characters and 25 seconds, and a cut says so.
-- `screenshot`/`watch` write into `<project>\.project\browser\shots\` and answer the
-  absolute path *and* the project-relative one the chat can render.
+- `screenshot` writes into `<project>\.project\shots\` as `browser-<stamp>.png` — the one
+  folder every brief names for a picture — and answers the absolute path *and* the
+  project-relative one the chat can render. `watch` keeps its frame strips under
+  `<project>\.project\browser\watch-<stamp>\`, where only the tool and a reader go.
 - `save` fetches an address **in the page's own context** (`credentials: 'include'`), so
   the request carries the session's cookies, origin and headers. It takes `method`,
   `form`, `xhr` and `json`, and the cross-origin leg is automatic: when the page cannot
@@ -371,11 +373,17 @@ The sign-in button says what it is doing: **Opening…** then **Sign In…**, bo
 ## Project artifacts, not a shared folder
 
 The engine gives each project's MCP server that project's folder as its working
-directory (measured 11 Nov), so screenshots and frame strips go to
-`<project>\.project\browser\shots\`: they are deleted with the project, two projects
-browsing the same site keep their own pictures, and nothing under the harness has to be
-forgiven. `src/browser/artifacts.js` decides; the harness folder is the fallback for a
-server whose cwd is not a project.
+directory (measured 11 Nov), so a screenshot goes to `<project>\.project\shots\` — the
+same folder the brief and the visual-review skill name — and the frame strips and page
+snapshots to `<project>\.project\browser\`. They are deleted with the project, two
+projects browsing the same site keep their own pictures, and nothing under the harness
+has to be forgiven. `src/browser/artifacts.js` decides (`shotDir` and `artifactDir`);
+the harness folder is the fallback for a server whose cwd is not a project.
+
+It was `<project>\.project\browser\shots\` until 28 Nov, and that was a folder too many:
+the brief said pictures go in `.project/shots`, the tool answered with
+`.project/browser/shots`, and a model spent a step deciding which instruction was the
+real one. One folder for a picture; the rest is the tool's own evidence.
 
 ## A local mock is a page
 
@@ -530,7 +538,7 @@ browser does as the operator happens without a person saying yes to a card first
 | `src/browser/agent.js` | the agent-browser wrapper: snapshot, ref click and fill, the daemon close |
 | `vendor-agent-browser.ps1` | restores the pinned binary and its licence into `bin\agent-browser` |
 | `src/browser/allow.js` | the http(s) and local-page checks |
-| `src/browser/artifacts.js` | where a project's screenshots live |
+| `src/browser/artifacts.js` | where a screenshot (`shotDir`) and the tool's own evidence (`artifactDir`) live |
 | `src/browser/downloads.js` | safe names, collision suffixes, the ASCII bar and byte labels |
 | `src/browser/sites.js` | the sites record: add, touch, forget, de-duplicate |
 | `src/browser/session-watch.js` | polls the sign-in window; hides it, or waits for the operator to close it |

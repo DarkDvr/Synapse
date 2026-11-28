@@ -181,7 +181,8 @@ export const TOOLS = [
     name: 'screenshot',
     description:
       'Take a picture of the page — the viewport, or the whole document — and answer its path, ' +
-      'in the project under .project\\browser\\shots; the answer also gives the relative path ' +
+      'in the project under .project\\shots as browser-<stamp>.png, the same folder the brief and ' +
+      'the visual-review skill use; the answer also gives the relative path ' +
       'the chat renders, so you can show it without copying. ' +
       'Read the image to see what a person would see.',
     inputSchema: {

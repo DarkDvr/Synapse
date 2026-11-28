@@ -48,9 +48,11 @@ test('handoff describes the card, not the window it used to open', () => {
   assert.doesNotMatch(d, /second monitor/i, 'the window is on the operator’s monitor now');
 });
 
-test('screenshot gives a path the chat can render', () => {
+test('screenshot gives a path the chat can render, in the folder the brief names', () => {
   const d = text('screenshot');
-  assert.match(d, /\.project\\browser\\shots/, 'the project folder');
+  assert.match(d, /\.project\\shots/, 'the same .project\\shots every brief names');
+  assert.doesNotMatch(d, /browser\\shots/, 'not a second folder for the same picture');
+  assert.match(d, /browser-<stamp>\.png/, 'and a name that cannot collide with a render');
   assert.match(d, /relative path/, 'and the chat-ready one');
 });
 

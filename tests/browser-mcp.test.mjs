@@ -12,7 +12,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from './tmpdir.mjs';
 import { findEdge } from '../src/browser/browser.js';
-import { artifactDir } from '../src/browser/artifacts.js';
+import { artifactDir, shotDir } from '../src/browser/artifacts.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SERVER = path.join(ROOT, 'src', 'mcp', 'browser-server.js');
@@ -143,7 +143,7 @@ test('the server answers the protocol and its tools work on a local page', async
     const file = /Screenshot: (.*) \(/.exec(shot.result.content[0].text)?.[1];
     assert.ok(file && fs.existsSync(file), 'the screenshot was not written');
     assert.match(shot.result.content[0].text, /cite it exactly as !\[\]\(/, 'the answer must give a path the chat can render');
-    assert.match(shot.result.content[0].text, /shot-\d/, 'the answer names the file');
+    assert.match(shot.result.content[0].text, /browser-\d/, 'the answer names the file');
 
     // The fence is the browser itself, not a host list — and a `file:` page is allowed
     // only for a file inside the projects folder. The engine binary is outside it, so
@@ -163,19 +163,20 @@ test('the server answers the protocol and its tools work on a local page', async
 
 // Where a project's browsing leaves its files. The engine gives a project's server that
 // project's folder as its working directory (measured 11 Nov), so the artifacts live in
-// the project: deleted with it, and never shared between two projects.
-test('a project server writes inside the project, anything else in the harness', () => {
+// the project: deleted with it, and never shared between two projects. A *picture* goes
+// in `.project/shots` — the folder every brief names — and the tool's own evidence
+// (snapshots, frame strips) in `.project/browser`.
+test('a project server writes its screenshot in the brief’s folder, and its evidence beside it', () => {
   const root = 'F:\\dev\\Synapse.Projects';
-  assert.equal(
-    artifactDir('F:\\dev\\Synapse.Projects\\demo', root),
-    'F:\\dev\\Synapse.Projects\\demo\\.project\\browser\\shots',
-  );
+  const project = 'F:\\dev\\Synapse.Projects\\demo';
+  assert.equal(shotDir(project, root), 'F:\\dev\\Synapse.Projects\\demo\\.project\\shots');
+  assert.equal(artifactDir(project, root), 'F:\\dev\\Synapse.Projects\\demo\\.project\\browser\\shots');
   // The projects root is the "all projects" context, not a project.
-  assert.match(artifactDir(root, root), /data.*browser.*shots$/);
+  assert.match(shotDir(root, root), /data.*browser.*shots$/);
   // The harness's own folder is not a project either.
-  assert.match(artifactDir('F:\\dev\\Synapse', root), /data.*browser.*shots$/);
+  assert.match(shotDir('F:\\dev\\Synapse', root), /data.*browser.*shots$/);
   // A sibling whose name starts with the root's name is not inside it.
-  assert.match(artifactDir('F:\\dev\\Synapse.Projects2\\x', root), /data.*browser.*shots$/);
+  assert.match(shotDir('F:\\dev\\Synapse.Projects2\\x', root), /data.*browser.*shots$/);
 });
 
 // A process whose working directory is a folder keeps that folder undeletable on Windows.
