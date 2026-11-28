@@ -161,7 +161,7 @@ test('the app wires the mode note and the shared role dialog', () => {
   assert.match(app, /clearModeNote\(\);/);
   const roleModels = fs.readFileSync(new URL('../web/role-models.js', import.meta.url), 'utf8');
   assert.match(roleModels, /roleId === 'architect' && state\.mode === 'single'/);
-  assert.match(roleModels, /Instructions \/ Persona for this role \(Single mode only\)/);
+  assert.match(roleModels, /label: isPersona \? 'Instructions' : 'Instructions for this role'/);
   assert.match(roleModels, /savePersona\(project\.id/);
   const composer = fs.readFileSync(new URL('../web/composer.js', import.meta.url), 'utf8');
   assert.match(composer, /clearModeNote\(\);/);

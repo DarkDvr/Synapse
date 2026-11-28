@@ -243,10 +243,8 @@ export async function editRoleSettings(roleId) {
     fields.push({
       name: 'skillsHere',
       type: 'list',
-      label: `Skills it can load — all ${available.length} of them`,
+      label: `Skills it can load (${available.length})`,
       items: available.map((s) => ({ name: s.name, hint: s.description })),
-      hint:
-        'Single has no skill list to keep: every one of these is open to the Architect, and it picks what a piece of work needs.',
     });
   } else {
     fields.push({
@@ -273,23 +271,22 @@ export async function editRoleSettings(roleId) {
     fields.push({
       name: 'personaName',
       type: 'text',
-      label: 'Persona name (Single mode only)',
+      label: 'Persona name',
       value: persona?.name || '',
       placeholder: 'Persona Name',
-      tip: 'The name on the Architect card in Single mode. Optional; without one the card stays “Architect”.',
+      tip: 'The name on the Architect card. Optional; without one the card stays “Architect”.',
     });
   }
   fields.push({
     name: 'instructions',
     type: 'textarea',
-    label: isPersona
-      ? 'Instructions / Persona for this role (Single mode only)'
-      : 'Instructions for this role',
+    // The persona box is the reason this dialog exists: it takes the room the skill
+    // list does not need.
+    rows: isPersona ? 8 : 4,
+    label: isPersona ? 'Instructions' : 'Instructions for this role',
     value: entry.instructions || '',
-    placeholder: isPersona ? '' : 'Anything it should remember every turn. Optional.',
-    tip: isPersona
-      ? 'This is this project’s Single-mode persona. Multi keeps the global block; with no persona, Single has no voice from it.'
-      : '',
+    placeholder: isPersona ? 'How it should speak, and what it should keep in mind.' : 'Anything it should remember every turn. Optional.',
+    tip: '',
   });
   if (isPersona && persona && (persona.name || persona.instructions)) {
     fields.push({
@@ -297,7 +294,7 @@ export async function editRoleSettings(roleId) {
       type: 'check',
       label: 'Remove this persona',
       value: false,
-      hint: 'The card returns to “Architect”. Single then has no persona; the global block stays Multi-only.',
+      hint: 'The Architect card returns to its role name, and nothing is added to its voice.',
     });
   }
 
@@ -307,7 +304,7 @@ export async function editRoleSettings(roleId) {
       roleId === 'qc'
         ? 'Tick a skill to let this role load it; “Required” makes the brief demand it, and the Architect is told if it was skipped. Real use is the default focus: the wording, the clipping and the bad input an ordinary person meets.'
         : isPersona
-          ? 'Every skill on this machine is open to Single — the list above is what it can load, and it picks at the moment a piece of work needs one. The instruction box is this project\'s Single-mode persona; Multi keeps the global Architect instructions. With no persona, Single has no voice from the global block.'
+          ? 'How the Architect speaks in Single mode: a name for its card, and instructions it follows every turn.'
           : 'Tick a skill to let this role load it; “Required” makes the brief demand it, and the Architect is told if it was skipped. Instructions are added to what the role is told on every turn.',
     fields,
     confirmLabel: 'Save',
@@ -353,10 +350,10 @@ export async function editRoleSettings(roleId) {
     toast(
       removePersona ? 'Persona Removed' : personaName || text ? 'Persona Saved' : 'Nothing Changed',
       removePersona
-        ? 'Single has no persona now; the global block stays Multi-only.'
+        ? 'The Architect card is back to its role name, with no extra voice.'
         : personaName || text
-          ? 'Single mode only; the Architect’s Multi skills and instructions are untouched.'
-          : 'The persona is empty, so Single keeps the role name and no extra voice.',
+          ? 'This project’s Single mode speaks in that voice from the next turn.'
+          : 'Nothing was written, so the persona is as it was.',
     );
     return;
   }

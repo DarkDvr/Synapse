@@ -140,22 +140,16 @@ export function openDialog({
         }
         // A plain list of what exists, with no control: Single may load every skill
         // on the machine, so ticking a subset would be a promise the session does not
-        // keep. The Architect picks at the moment the work needs one.
+        // keep. It is reference, not a decision — one name a line, the description on
+        // hover — so it gives its room to the field below it.
         if (f.type === 'list') {
           const rows = (f.items || [])
             .map(
               (it) =>
-                `<li class="dlg-list-row"><span class="dlg-list-name">${esc(it.name)}</span>` +
-                (it.hint ? `<small>${esc(it.hint)}</small>` : '') +
-                `</li>`,
+                `<li class="dlg-list-row" title="${esc(it.hint || it.name)}">${esc(it.name)}</li>`,
             )
             .join('');
-          return (
-            `<div class="set-field wide"><span>${esc(f.label)}</span>` +
-            `<ul class="dlg-list">${rows}</ul>` +
-            (f.hint ? `<small class="dlg-hint">${esc(f.hint)}</small>` : '') +
-            `</div>`
-          );
+          return `<div class="set-field wide"><span>${esc(f.label)}</span><ul class="dlg-list">${rows}</ul></div>`;
         }
         // Skills carry two levels: allowed (the engine refuses anything else) and
         // required (the brief demands it, and the runner reports it to the
@@ -206,7 +200,7 @@ export function openDialog({
               .map((o) => `<option value="${esc(o.v)}"${o.v === f.value ? ' selected' : ''}>${esc(o.l)}</option>`)
               .join('')}</select>`
           : f.type === 'textarea'
-            ? `<textarea id="dlg-${esc(f.name)}" rows="4" placeholder="${esc(f.placeholder ?? '')}"${tip}>${esc(f.value ?? '')}</textarea>`
+            ? `<textarea id="dlg-${esc(f.name)}" rows="${Number(f.rows) > 0 ? Number(f.rows) : 4}" placeholder="${esc(f.placeholder ?? '')}"${tip}>${esc(f.value ?? '')}</textarea>`
             : `<input id="dlg-${esc(f.name)}" type="text" value="${esc(f.value ?? '')}" placeholder="${esc(f.placeholder ?? '')}"${tip} />`;
         // A hint under a plain field: the rename dialog uses it to say what the
         // folder name will do, and the path it will become (12 Nov).

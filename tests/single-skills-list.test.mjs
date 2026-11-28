@@ -75,8 +75,8 @@ test('a list field is read, not filled in', async () => {
   });
   const html = $('dialogBody').innerHTML;
   assert.match(html, /dlg-list/);
-  assert.match(html, /frontend-design/);
-  assert.match(html, /Nothing to tick\./);
+  assert.match(html, /title="A page with a point of view\.">frontend-design</);
+  assert.doesNotMatch(html, /Nothing to tick\./, 'no prose under a list');
   assert.doesNotMatch(html, /<input/);
   assert.doesNotMatch(html, /data-skill-allow/);
   assert.equal(readDialog().skillsHere, undefined, 'a list collects nothing');
@@ -89,15 +89,20 @@ test('Single lists every skill the Architect can see, and offers no boxes', asyn
   const pending = editRoleSettings('architect');
   await tick();
   const html = $('dialogBody').innerHTML;
-  assert.match(html, /Skills it can load — all 3 of them/, 'it counts what is on the machine');
+  assert.match(html, /Skills it can load \(3\)/, 'the count is what is on the machine');
   assert.match(html, /aesthetic-foundations/);
   assert.match(html, /frontend-design/);
   assert.match(html, /visual-review/);
   assert.doesNotMatch(html, /OpenCode/, 'the engine’s own built-in skill is not listed');
   assert.doesNotMatch(html, /data-skill-allow/, 'no allow boxes in Single');
   assert.doesNotMatch(html, /data-skill-must|>Required</, 'nothing is “required” in a chat');
-  assert.match(html, /every one of these is open to the Architect/);
-  assert.doesNotMatch(html, /Skills apply in both modes/);
+  // The list is reference, not a decision: a name a line, the description on hover,
+  // and no prose taking the room the persona box needs.
+  assert.match(html, /<li class="dlg-list-row" title="A page with a point of view.">frontend-design<\/li>/);
+  assert.doesNotMatch(html, /A page with a point of view\.<\/li>/, 'the description is not printed');
+  assert.match(html, /rows="8"/, 'the persona box takes the height the list gave up');
+  // This popup belongs to Single: nothing in it explains Multi.
+  assert.doesNotMatch(html, /Multi/);
   closeDialog(null);
   await pending;
   assert.equal(calls.filter((c) => c.method === 'PUT').length, 0, 'closing the dialog writes nothing');
