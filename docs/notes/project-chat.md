@@ -41,8 +41,11 @@ compaction became in-place on 27 Nov.
     commit. Multi ignores it; the Multi brief only says that a Single-mode persona is on
     file and is not in force. The card reads `Vekra (Architect)` in Single and
     `Architect` in Multi; the transcript header stays `Architect`. The ✎ is the same
-    role-settings dialog in both modes: skills stay shared, and in Single its
-    instruction box is the project persona. A project without one has no voice in
+    role-settings dialog in both modes, but not the same choice: in Multi it ticks the
+    skills the Architect may load, while in Single it **lists** every skill the machine
+    has (a chat loads any of them, so there is nothing to tick) and its instruction box
+    is the project persona. Saving it in Single writes the persona only — the Architect's
+    Multi skill list is left as it was. A project without one has no voice in
     Single: the global Architect instructions stay Multi-only. A mode switch replaces
     the one yellow Synapse note with a Compact action, and the next brief carries the mode. A
     private project hides the persona from a LAN view with the rest of its files;

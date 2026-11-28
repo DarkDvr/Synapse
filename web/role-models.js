@@ -236,25 +236,39 @@ export async function editRoleSettings(roleId) {
       ],
     });
   }
-  fields.push({
-    name: 'skills',
-    type: 'skills',
-    label: 'Skills — tick to allow, “Required” to make the brief demand it',
-    options: available
-      .map((s) => ({ v: s.name, l: s.name, hint: s.description }))
-      .concat(
-        missingHere.map((m) => ({
-          v: m.name,
-          l: m.name,
-          hint: 'Not installed on this machine — the reference is kept, but nothing loads.',
+  // Single loads every skill on the machine, so there is nothing to allow or require:
+  // the dialog lists what the Architect can see and leaves the choosing to the turn
+  // that needs one. The role's Multi list is not touched from here.
+  if (isPersona) {
+    fields.push({
+      name: 'skillsHere',
+      type: 'list',
+      label: `Skills it can load — all ${available.length} of them`,
+      items: available.map((s) => ({ name: s.name, hint: s.description })),
+      hint:
+        'Single has no skill list to keep: every one of these is open to the Architect, and it picks what a piece of work needs.',
+    });
+  } else {
+    fields.push({
+      name: 'skills',
+      type: 'skills',
+      label: 'Skills — tick to allow, “Required” to make the brief demand it',
+      options: available
+        .map((s) => ({ v: s.name, l: s.name, hint: s.description }))
+        .concat(
+          missingHere.map((m) => ({
+            v: m.name,
+            l: m.name,
+            hint: 'Not installed on this machine — the reference is kept, but nothing loads.',
+          })),
+        )
+        .map((o) => ({
+          ...o,
+          allowed: allowed.includes(o.v),
+          must: (entry.mustLoad || []).includes(o.v),
         })),
-      )
-      .map((o) => ({
-        ...o,
-        allowed: allowed.includes(o.v),
-        must: (entry.mustLoad || []).includes(o.v),
-      })),
-  });
+    });
+  }
   if (isPersona) {
     fields.push({
       name: 'personaName',
@@ -293,7 +307,7 @@ export async function editRoleSettings(roleId) {
       roleId === 'qc'
         ? 'Tick a skill to let this role load it; “Required” makes the brief demand it, and the Architect is told if it was skipped. Real use is the default focus: the wording, the clipping and the bad input an ordinary person meets.'
         : isPersona
-          ? 'Skills apply in both modes. The instruction box is this project\'s Single-mode persona; Multi keeps the global Architect instructions. With no persona, Single has no voice from the global block.'
+          ? 'Every skill on this machine is open to Single — the list above is what it can load, and it picks at the moment a piece of work needs one. The instruction box is this project\'s Single-mode persona; Multi keeps the global Architect instructions. With no persona, Single has no voice from the global block.'
           : 'Tick a skill to let this role load it; “Required” makes the brief demand it, and the Architect is told if it was skipped. Instructions are added to what the role is told on every turn.',
     fields,
     confirmLabel: 'Save',
@@ -311,7 +325,7 @@ export async function editRoleSettings(roleId) {
       });
     },
   });
-  if (!result || !Array.isArray(result.skills)) return;
+  if (!result) return;
 
   const text = String(result.instructions || '').trim();
   const personaName = isPersona
@@ -327,6 +341,27 @@ export async function editRoleSettings(roleId) {
   }
   const removePersona = isPersona && hadPersona && (result.removePersona === true || (!personaName && !text));
 
+  // Single keeps no skill list of its own: every skill is loadable, so this dialog
+  // saves the persona and leaves the Architect's Multi list exactly as it was.
+  if (isPersona) {
+    try {
+      await savePersona(project.id, removePersona ? null : { name: personaName, instructions: text });
+    } catch (err) {
+      toast('Could Not Save the Persona', err.message);
+      return;
+    }
+    toast(
+      removePersona ? 'Persona Removed' : personaName || text ? 'Persona Saved' : 'Nothing Changed',
+      removePersona
+        ? 'Single has no persona now; the global block stays Multi-only.'
+        : personaName || text
+          ? 'Single mode only; the Architect’s Multi skills and instructions are untouched.'
+          : 'The persona is empty, so Single keeps the role name and no extra voice.',
+    );
+    return;
+  }
+
+  if (!Array.isArray(result.skills)) return;
   const draft = JSON.parse(JSON.stringify(state.config || {}));
   draft.roles = { ...(draft.roles || {}) };
   const next = { ...(draft.roles[roleId] || {}) };
@@ -339,39 +374,16 @@ export async function editRoleSettings(roleId) {
   if (mustLoad.length) next.mustLoad = mustLoad;
   else delete next.mustLoad;
   if (roleId === 'qc') next.focus = result.focus === 'security' ? 'security' : 'app';
-  // In Single the instruction box is the project's persona, not the global
-  // Architect text. Leave the global entry untouched for Multi.
-  if (!isPersona) {
-    if (text) next.instructions = text;
-    else delete next.instructions;
-  }
+  if (text) next.instructions = text;
+  else delete next.instructions;
   draft.roles[roleId] = next;
 
   try {
     state.config = await api('PUT', '/api/config', draft);
-    if (isPersona) {
-      if (hadPersona || removePersona || personaName || text) {
-        try {
-          await savePersona(project.id, removePersona ? null : { name: personaName, instructions: text });
-        } catch (err) {
-          toast('Could Not Save the Persona', err.message);
-          return;
-        }
-      }
-      toast(
-        removePersona ? 'Persona Removed' : personaName || text ? 'Persona Saved' : 'Role Saved',
-        removePersona
-          ? 'Single has no persona now; the global block stays Multi-only. Skills stay saved for both modes.'
-          : personaName || text
-            ? 'Skills apply in both modes; the persona is Single mode only.'
-            : `${role?.name || roleId} settings saved for both modes.`,
-      );
-    } else {
-      toast(
-        'Role Saved',
-        `${role?.name || roleId}${roleId === 'qc' ? ` · ${next.focus === 'security' ? 'security' : 'real use'}` : ''}.`,
-      );
-    }
+    toast(
+      'Role Saved',
+      `${role?.name || roleId}${roleId === 'qc' ? ` · ${next.focus === 'security' ? 'security' : 'real use'}` : ''}.`,
+    );
     // The ruleset follows the mode at the next send, so a changed skill list
     // reaches the chat then — no separate PATCH, and nothing to go stale.
   } catch (err) {

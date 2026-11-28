@@ -138,6 +138,25 @@ export function openDialog({
             .join('');
           return `<div class="set-field wide"><span>${esc(f.label)}</span><div class="dlg-checklist">${rows}</div></div>`;
         }
+        // A plain list of what exists, with no control: Single may load every skill
+        // on the machine, so ticking a subset would be a promise the session does not
+        // keep. The Architect picks at the moment the work needs one.
+        if (f.type === 'list') {
+          const rows = (f.items || [])
+            .map(
+              (it) =>
+                `<li class="dlg-list-row"><span class="dlg-list-name">${esc(it.name)}</span>` +
+                (it.hint ? `<small>${esc(it.hint)}</small>` : '') +
+                `</li>`,
+            )
+            .join('');
+          return (
+            `<div class="set-field wide"><span>${esc(f.label)}</span>` +
+            `<ul class="dlg-list">${rows}</ul>` +
+            (f.hint ? `<small class="dlg-hint">${esc(f.hint)}</small>` : '') +
+            `</div>`
+          );
+        }
         // Skills carry two levels: allowed (the engine refuses anything else) and
         // required (the brief demands it, and the runner reports it to the
         // Architect if the worker never loaded it). Two boxes per row; the
@@ -213,6 +232,8 @@ export function readDialog() {
   }
   for (const f of dialogFields) {
     if (f.type === 'check') continue;
+    // A list is reading, not a control: it has nothing to collect.
+    if (f.type === 'list') continue;
     if (f.type === 'checklist') {
       values[f.name] = [...$('dialogBody').querySelectorAll('input[data-check]')]
         .filter((el) => el.checked)
